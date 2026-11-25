@@ -16,7 +16,13 @@ interface StylePresetManagerProps {
   user: User | null;
 }
 
-const SAMPLER_OPTIONS = ['euler', 'euler_ancestral', 'dpmpp_2m', 'dpmpp_2m_sde', 'uni_pc'];
+const SAMPLER_OPTIONS = [
+  { value: 'euler', label: 'euler — 乾淨快速' },
+  { value: 'euler_ancestral', label: 'euler_ancestral — 柔和插畫 / Turbo 推薦' },
+  { value: 'dpmpp_2m', label: 'dpmpp_2m — 電影寫實主力' },
+  { value: 'dpmpp_2m_sde', label: 'dpmpp_2m_sde — 立體材質細緻' },
+  { value: 'uni_pc', label: 'uni_pc — 低步數高效率' },
+];
 
 const EMPTY_FORM = (type: StylePresetType): StylePresetInput => ({
   name: '',
@@ -25,7 +31,7 @@ const EMPTY_FORM = (type: StylePresetType): StylePresetInput => ({
   negativePromptTemplate: 'lowres, blurry, watermark, deformed',
   sampler: type === 'image' ? 'euler_ancestral' : 'euler',
   steps: type === 'image' ? 24 : 20,
-  cfgScale: type === 'image' ? 6.5 : 6.0,
+  cfgScale: type === 'image' ? 6.0 : 6.0,
   loraName: '',
 });
 
@@ -35,6 +41,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
   const [activeType, setActiveType] = useState<StylePresetType>('image');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [form, setForm] = useState<StylePresetInput>(() => EMPTY_FORM('image'));
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -61,6 +68,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM(activeType));
+    setShowAdvancedParams(false);
     setIsFormOpen(true);
     setError(null);
     setStatusMsg(null);
@@ -80,6 +88,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
       loraName: preset.loraName || '',
       createdAt: preset.createdAt,
     });
+    setShowAdvancedParams(false);
     setIsFormOpen(true);
     setError(null);
     setStatusMsg(null);
@@ -149,7 +158,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
         if (!useCloud) {
           setPresets((prev) => [...inserted, ...prev]);
         }
-        setStatusMsg(`已匯入 ${inserted.length} 組預設風格範本`);
+        setStatusMsg(`已匯入 ${inserted.length} 組內建風格範本`);
       } else {
         setStatusMsg('內建預設範本皆已存在於列表中');
       }
@@ -295,52 +304,79 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
               />
             </label>
 
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1.5">
-                <span className="text-[11px] text-[#9A9E9C] block">採樣器</span>
-                <ArchSelect
-                  value={form.sampler}
-                  onChange={(val) => setForm((f) => ({ ...f, sampler: val }))}
-                  options={SAMPLER_OPTIONS.map((s) => ({ value: s, label: s }))}
-                />
+            {/* 預設折疊的進階參數手風琴（依 GPU 模型自動安全配對） */}
+            <div className="border-t border-white/10 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedParams((v) => !v)}
+                className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 hover:border-white/30 text-xs text-[#9A9E9C] flex items-center justify-between active:scale-[0.98] transition-all"
+                data-testid="toggle-advanced-params-btn"
+              >
+                <span>進階參數（自動安全配對）</span>
+                <span
+                  className={`dj-tnum text-[10px] transition-transform duration-300 ${
+                    showAdvancedParams ? 'rotate-180' : ''
+                  }`}
+                >
+                  ▼
+                </span>
+              </button>
+
+              <div className={`dj-accordion ${showAdvancedParams ? 'is-open' : ''}`}>
+                <div className="dj-accordion-inner">
+                  <div className="pt-3 space-y-3">
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] text-[#9A9E9C] block">採樣器 (Sampler)</span>
+                      <ArchSelect
+                        value={form.sampler}
+                        onChange={(val) => setForm((f) => ({ ...f, sampler: val }))}
+                        options={SAMPLER_OPTIONS}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] text-[#9A9E9C]">Steps（Turbo 自動限縮）</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={form.steps}
+                          onChange={(e) => setForm((f) => ({ ...f, steps: Number(e.target.value) }))}
+                          className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
+                        />
+                      </label>
+
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] text-[#9A9E9C]">CFG（Turbo 自動限縮）</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min={1}
+                          max={20}
+                          value={form.cfgScale}
+                          onChange={(e) => setForm((f) => ({ ...f, cfgScale: Number(e.target.value) }))}
+                          className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="block space-y-1.5">
+                      <span className="text-xs text-[#9A9E9C]">
+                        單一 LoRA 權重檔名（選填，置於 Drive models/loras/）
+                      </span>
+                      <input
+                        type="text"
+                        value={form.loraName || ''}
+                        onChange={(e) => setForm((f) => ({ ...f, loraName: e.target.value }))}
+                        placeholder="留空不使用；範例：watercolor_v1.safetensors"
+                        className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
-
-              <label className="block space-y-1.5">
-                <span className="text-[11px] text-[#9A9E9C]">Steps</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={form.steps}
-                  onChange={(e) => setForm((f) => ({ ...f, steps: Number(e.target.value) }))}
-                  className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
-                />
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-[11px] text-[#9A9E9C]">CFG</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  min={1}
-                  max={20}
-                  value={form.cfgScale}
-                  onChange={(e) => setForm((f) => ({ ...f, cfgScale: Number(e.target.value) }))}
-                  className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
-                />
-              </label>
             </div>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs text-[#9A9E9C]">單一 LoRA 名稱（選填）</span>
-              <input
-                type="text"
-                value={form.loraName || ''}
-                onChange={(e) => setForm((f) => ({ ...f, loraName: e.target.value }))}
-                placeholder="例如：film_grain_v2.safetensors"
-                className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
-              />
-            </label>
 
             <button
               type="submit"

@@ -28,6 +28,24 @@ HIGH_VRAM_CKPT = os.getenv("HUISHI_CKPT_HIGH", "sd_xl_base_1.0.safetensors")
 LOW_VRAM_CKPT = os.getenv("HUISHI_CKPT_LOW", "sd_xl_turbo_1.0_fp16.safetensors")
 
 
+def adapt_sampler_params_for_checkpoint(
+    ckpt_name: str,
+    sampler: str,
+    steps: int,
+    cfg: float,
+) -> tuple[str, int, float]:
+    """
+    Auto-adapt sampling parameters so SDXL Turbo never receives high steps/CFG
+    that cause over-fried/oversaturated outputs, while SDXL Base keeps full quality.
+    """
+    if "turbo" in ckpt_name.lower():
+        safe_steps = max(4, min(steps, 8)) if steps > 10 else max(1, steps)
+        safe_cfg = min(cfg, 1.8) if cfg > 2.5 else max(1.0, cfg)
+        safe_sampler = "euler_ancestral" if sampler in ("dpmpp_2m", "dpmpp_2m_sde") else sampler
+        return safe_sampler, safe_steps, safe_cfg
+    return sampler, steps, cfg
+
+
 def build_txt2img_workflow(
     prompt_text: str,
     style_preset: dict[str, Any],
@@ -38,13 +56,16 @@ def build_txt2img_workflow(
     pos_tpl = style_preset.get("positivePromptTemplate") or "{prompt}"
     positive = pos_tpl.replace("{prompt}", prompt_text) if "{prompt}" in pos_tpl else f"{prompt_text}, {pos_tpl}"
     negative = style_preset.get("negativePromptTemplate") or "lowres, blurry, watermark"
-    sampler = style_preset.get("sampler") or "euler"
-    steps = int(style_preset.get("steps") or 24)
-    cfg = float(style_preset.get("cfgScale") or 6.5)
+    raw_sampler = style_preset.get("sampler") or "euler"
+    raw_steps = int(style_preset.get("steps") or 24)
+    raw_cfg = float(style_preset.get("cfgScale") or 6.5)
     lora_name = (style_preset.get("loraName") or "").strip()
 
     is_high = vram_mode == "high_vram"
     ckpt_name = HIGH_VRAM_CKPT if is_high else LOW_VRAM_CKPT
+    sampler, steps, cfg = adapt_sampler_params_for_checkpoint(
+        ckpt_name, raw_sampler, raw_steps, raw_cfg
+    )
     width, height = (1024, 1024) if is_high else (768, 768)
     actual_seed = seed if seed is not None else int(time.time() * 1000) % (2**31 - 1)
 

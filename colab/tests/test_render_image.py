@@ -43,7 +43,14 @@ class TestRenderImageAndMedia(unittest.TestCase):
         low_wf = comfy_client.build_txt2img_workflow("a quiet alley", preset, vram_mode="low_vram", seed=42)
 
         self.assertEqual(high_wf["4"]["inputs"]["width"], 1024)
+        self.assertEqual(high_wf["5"]["inputs"]["steps"], 25)
+        self.assertEqual(high_wf["5"]["inputs"]["cfg"], 6.0)
+        self.assertEqual(high_wf["5"]["inputs"]["sampler_name"], "dpmpp_2m")
+
         self.assertEqual(low_wf["4"]["inputs"]["width"], 768)
+        self.assertLessEqual(low_wf["5"]["inputs"]["steps"], 8)
+        self.assertLessEqual(low_wf["5"]["inputs"]["cfg"], 1.8)
+        self.assertEqual(low_wf["5"]["inputs"]["sampler_name"], "euler_ancestral")
         self.assertIn("8", high_wf)  # LoraLoader node
 
         buf = io.BytesIO()
