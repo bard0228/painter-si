@@ -8,6 +8,7 @@ import {
   submitSingleImageRenderJob,
 } from '../services/renderJobService';
 import type { GatewayConfig, RenderJob, StylePreset } from '../types/domain';
+import { translatePromptToEnglish } from '../services/promptTranslator';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -27,6 +28,7 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<RenderJob | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,12 +77,17 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
 
     setSubmitting(true);
     setError(null);
+    setStatusMsg(null);
     try {
+      const { englishPrompt, translated } = await translatePromptToEnglish(prompt);
+      if (translated) {
+        setStatusMsg(`已自動翻譯為英文提示詞：${englishPrompt}`);
+      }
       const created = await submitSingleImageRenderJob({
         useCloud,
         gatewayUrl: gatewayConfig?.url,
         user,
-        prompt,
+        prompt: englishPrompt,
         stylePreset: selectedPreset,
       });
       if (!useCloud) {
@@ -148,16 +155,22 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
         <label className="block space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#9A9E9C]">畫面描述 (Prompt)</span>
-            <span className="text-[10px] text-[#6E7371]">SDXL 模型請輸入英文</span>
+            <span className="text-[10px] text-[#4C7C62]">支援中文自動轉英文</span>
           </div>
           <textarea
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="例如：a cute fluffy cat sleeping on a soft white cloud, dreamy pastel sky"
+            placeholder="直接輸入中文即可，例如：一隻可愛的橘貓在蓬鬆白雲上睡覺"
             className="w-full p-3 bg-[#0E0F12] border border-white/14 text-sm text-[#F4F4F0] placeholder:text-[#6E7371] leading-relaxed focus:outline-none focus:border-white/40"
           />
         </label>
+
+        {statusMsg && (
+          <div className="dj-panel-reveal p-3 border border-[#4C7C62] bg-[#4C7C62]/10 text-xs text-[#4C7C62] break-words">
+            {statusMsg}
+          </div>
+        )}
 
         {error && (
           <div className="dj-panel-reveal p-3 border border-[#B86B4B] bg-[#B86B4B]/10 text-xs text-[#F4F4F0] break-all">
