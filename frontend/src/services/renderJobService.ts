@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   limit,
   onSnapshot,
@@ -265,4 +266,13 @@ export async function submitFfmpegExportJob(params: {
   }
 
   return job;
+}
+
+export async function deleteRenderJob(useCloud: boolean, jobId: string): Promise<void> {
+  if (useCloud && db && isFirebaseConfigured) {
+    await deleteDoc(doc(db, 'renderJobs', jobId));
+    return;
+  }
+  const list = readLocalJobs().filter((j) => j.id !== jobId);
+  writeLocalJobs(list);
 }

@@ -2,9 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { isFirebaseConfigured } from '../config/firebase';
 import { subscribeStylePresets } from '../services/stylePresetService';
-import { subscribeRenderJobs, submitSingleImageRenderJob } from '../services/renderJobService';
+import {
+  deleteRenderJob,
+  subscribeRenderJobs,
+  submitSingleImageRenderJob,
+} from '../services/renderJobService';
 import type { GatewayConfig, RenderJob, StylePreset } from '../types/domain';
 import { ArchSelect } from './ArchSelect';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SingleImageStudioProps {
   user: User | null;
@@ -21,6 +26,7 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   const [prompt, setPrompt] = useState('');
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<RenderJob | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,8 +94,31 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
     }
   };
 
+  const confirmDeleteJob = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setPendingDelete(null);
+    setError(null);
+    try {
+      await deleteRenderJob(useCloud, target.id);
+      if (!useCloud) {
+        setJobs((prev) => prev.filter((j) => j.id !== target.id));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <section className="dj-tab-enter space-y-5">
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="刪除算圖紀錄"
+        message={`確定要刪除這筆紀錄「${pendingDelete?.prompt || pendingDelete?.id || ''}」嗎？`}
+        onConfirm={confirmDeleteJob}
+        onCancel={() => setPendingDelete(null)}
+      />
+
       <div className="flex items-center justify-between border-b border-white/14 pb-3">
         <div className="flex items-center gap-2.5">
           <span className="dj-tnum text-xs tracking-widest text-[#6E7371]">[ 03 ]</span>
@@ -117,18 +146,21 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
         </div>
 
         <label className="block space-y-1.5">
-          <span className="text-xs text-[#9A9E9C]">畫面描述 (Prompt)</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#9A9E9C]">畫面描述 (Prompt)</span>
+            <span className="text-[10px] text-[#6E7371]">SDXL 模型請輸入英文</span>
+          </div>
           <textarea
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="例如：雨夜中的東京建築巷弄，微弱松綠霓虹倒映於濕潤石板路"
+            placeholder="例如：a cute fluffy cat sleeping on a soft white cloud, dreamy pastel sky"
             className="w-full p-3 bg-[#0E0F12] border border-white/14 text-sm text-[#F4F4F0] placeholder:text-[#6E7371] leading-relaxed focus:outline-none focus:border-white/40"
           />
         </label>
 
         {error && (
-          <div className="p-3 border border-[#B86B4B] bg-[#B86B4B]/10 text-xs text-[#F4F4F0] break-all">
+          <div className="dj-panel-reveal p-3 border border-[#B86B4B] bg-[#B86B4B]/10 text-xs text-[#F4F4F0] break-all">
             {error}
           </div>
         )}
@@ -160,17 +192,26 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
             <div key={job.id} className="dj-surface-card p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="dj-tnum text-[11px] text-[#6E7371] truncate">{job.id}</span>
-                <span
-                  className={`dj-tnum text-[10px] tracking-widest px-2 py-0.5 border ${
-                    job.status === 'completed'
-                      ? 'border-[#4C7C62] text-[#4C7C62]'
-                      : job.status === 'failed'
-                        ? 'border-[#B86B4B] text-[#B86B4B]'
-                        : 'border-white/30 text-[#F4F4F0]'
-                  }`}
-                >
-                  {job.status.toUpperCase()} {job.progress}%
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`dj-tnum text-[10px] tracking-widest px-2 py-0.5 border ${
+                      job.status === 'completed'
+                        ? 'border-[#4C7C62] text-[#4C7C62]'
+                        : job.status === 'failed'
+                          ? 'border-[#B86B4B] text-[#B86B4B]'
+                          : 'border-white/30 text-[#F4F4F0]'
+                    }`}
+                  >
+                    {job.status.toUpperCase()} {job.progress}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(job)}
+                    className="min-h-[48px] px-2.5 border border-[#B86B4B]/40 text-[11px] tracking-widest text-[#B86B4B] hover:border-[#B86B4B] active:scale-[0.96] transition-all"
+                  >
+                    刪除
+                  </button>
+                </div>
               </div>
 
               {job.prompt && (
