@@ -1,0 +1,280 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --dj-bg: #0E0F12;
+  --dj-bg-sheen: radial-gradient(ellipse at 70% 25%, rgba(30, 48, 40, 0.42) 0%, rgba(14, 15, 18, 0) 68%);
+  --dj-surface: #181A1E;
+  --dj-surface-2: #1E2025;
+  --dj-glass: rgba(20, 22, 25, 0.72);
+  --dj-border: rgba(255, 255, 255, 0.14);
+  --dj-border-hover: rgba(255, 255, 255, 0.36);
+  --dj-text: #F4F4F0;
+  --dj-muted: #9A9E9C;
+  --dj-dim: #6E7371;
+  --dj-accent-green: #4C7C62;
+  --dj-accent-warn: #B86B4B;
+  --dj-radius: 2px;
+  --dj-radius-sharp: 0px;
+  --dj-font-display: 'Cormorant Garamond', 'Noto Serif TC', Georgia, serif;
+  --dj-font-serif: 'Noto Serif TC', serif;
+  --dj-font-sans: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --dj-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dj-ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--dj-bg);
+  color: var(--dj-text);
+  font-family: var(--dj-font-sans);
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dj-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.dj-display {
+  font-family: var(--dj-font-display);
+  letter-spacing: 0.04em;
+}
+
+.dj-serif {
+  font-family: var(--dj-font-serif);
+}
+
+/* 暗黑液態玻璃面板與按鈕 */
+.dj-glass-panel {
+  background: var(--dj-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--dj-border);
+  border-radius: var(--dj-radius-sharp);
+}
+
+.dj-surface-card {
+  background: var(--dj-surface);
+  border: 1px solid var(--dj-border);
+  border-radius: var(--dj-radius);
+}
+
+.dj-btn {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 20px;
+  background: var(--dj-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--dj-border);
+  border-radius: var(--dj-radius);
+  color: var(--dj-text);
+  font-family: var(--dj-font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.24s ease, background-color 0.24s ease, transform 0.08s ease, opacity 0.2s ease;
+}
+
+.dj-btn:hover:not(:disabled) {
+  border-color: var(--dj-border-hover);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dj-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.dj-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dj-btn-primary {
+  background: rgba(244, 244, 240, 0.1);
+  border-color: rgba(244, 244, 240, 0.34);
+}
+
+/* 招牌動效 1：大文字逐字交錯遮罩推入與微透明漸顯 */
+.dj-text-mask {
+  display: inline-flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.dj-char {
+  display: inline-block;
+  white-space: pre;
+  transform: translateY(108%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.dj-text-mask.is-revealed .dj-char {
+  animation: djCharReveal 0.65s var(--dj-ease-expo) forwards;
+  animation-delay: calc(var(--char-idx, 0) * 38ms);
+}
+
+@keyframes djCharReveal {
+  0% {
+    transform: translateY(108%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.28;
+  }
+  100% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+}
+
+/* 招牌動效 2：大圖片斜角對開閘門 */
+.dj-curtain-wrap {
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+}
+
+.dj-curtain-media {
+  display: block;
+  clip-path: polygon(0% 58%, 100% 42%, 100% 42.4%, 0% 58.4%);
+  transform: scale(1.06);
+  opacity: 0;
+  will-change: clip-path, transform, opacity;
+}
+
+.dj-curtain-media.is-revealed {
+  animation: djDiagonalSplit 0.75s var(--dj-ease-expo) forwards;
+}
+
+@keyframes djDiagonalSplit {
+  0% {
+    opacity: 0.4;
+    clip-path: polygon(0% 58%, 100% 42%, 100% 42.4%, 0% 58.4%);
+    transform: scale(1.06);
+  }
+  15% {
+    opacity: 1;
+  }
+  72% {
+    clip-path: polygon(0% 16%, 100% 0%, 100% 84%, 0% 100%);
+  }
+  100% {
+    opacity: 1;
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+    transform: scale(1);
+  }
+}
+
+/* 方向性頁籤切換與動態展開 */
+.dj-tab-enter {
+  animation: djSlideRight 0.34s var(--dj-ease-spring) both;
+}
+
+.dj-slide-left {
+  animation: djSlideLeft 0.34s var(--dj-ease-spring) both;
+}
+
+.dj-panel-reveal {
+  animation: djPanelReveal 0.38s var(--dj-ease-expo) both;
+}
+
+.dj-modal-enter {
+  animation: djModalEnter 0.26s var(--dj-ease-expo) both;
+}
+
+.dj-accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.36s var(--dj-ease-spring), opacity 0.26s ease;
+}
+
+.dj-accordion.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.dj-accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@keyframes djSlideRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes djSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes djPanelReveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes djModalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 暗黑液態玻璃導航抽屜 */
+.dj-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 268px;
+  background: rgba(14, 15, 18, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid var(--dj-border);
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  transform: translateX(-102%);
+  transition: transform 0.36s var(--dj-ease-spring);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.dj-drawer.is-open {
+  transform: translateX(0);
+}

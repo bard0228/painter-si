@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 單人白名單驗證函式（請將 ALLOWED_EMAIL 替換為您的 Google 帳號信箱）
+    function isWhitelistedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == "qseft951753@gmail.com";
+    }
+
+    // 動態閘道設定（Colab 透過 Admin SDK 寫入，PWA 白名單用戶讀取）
+    match /system/gateway {
+      allow read: if isWhitelistedUser();
+      allow write: if false; // 僅限 Colab Admin SDK 寫入
+    }
+
+    // StylePreset（風格預設）
+    match /stylePresets/{presetId} {
+      allow read, write: if isWhitelistedUser();
+    }
+
+    // Storyboard（分鏡劇本）與其下屬 Shot
+    match /storyboards/{storyboardId} {
+      allow read, write: if isWhitelistedUser();
+    }
+
+    // RenderJob（算圖/算片任務）
+    match /renderJobs/{jobId} {
+      allow read, write: if isWhitelistedUser();
+    }
+
+    // 預設拒絕所有未明確授權之存取
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
