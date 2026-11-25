@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import './styles/dark-jp-kit.css';
 import App from './App';
 import { attachAndroidEdgeStretch } from './utils/android-overscroll';
+import { installGlobalDebugHooks } from './services/debugLogService';
+
+installGlobalDebugHooks();
 
 if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
   window.addEventListener('load', () => {

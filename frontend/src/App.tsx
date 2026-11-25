@@ -9,6 +9,7 @@ import { SingleImageStudio } from './components/SingleImageStudio';
 import { StoryboardManager } from './components/StoryboardManager';
 import { BatchRenderQueue } from './components/BatchRenderQueue';
 import { StoryboardEditor } from './components/StoryboardEditor';
+import { DebugConsoleModal } from './components/DebugConsoleModal';
 
 function MaskedTitle({ text, revealed }: { text: string; revealed: boolean }) {
   return (
@@ -34,9 +35,25 @@ export function App() {
   const [checkingHealth, setCheckingHealth] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'01' | '02' | '03' | '04' | '05' | '06'>('06');
   const [revealed, setRevealed] = useState(false);
   const [titleAnimKey, setTitleAnimKey] = useState(0);
+  const tapCountRef = React.useRef(0);
+  const tapTimerRef = React.useRef<number | null>(null);
+
+  const handleVersionSecretTap = () => {
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= 5) {
+      tapCountRef.current = 0;
+      setDebugOpen(true);
+      return;
+    }
+    tapTimerRef.current = window.setTimeout(() => {
+      tapCountRef.current = 0;
+    }, 2200);
+  };
 
   const switchSection = (code: '01' | '02' | '03' | '04' | '05' | '06') => {
     setActiveSection(code);
@@ -179,6 +196,15 @@ export function App() {
         }}
       />
 
+      <DebugConsoleModal
+        open={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        userEmail={user?.email}
+        gatewayConfig={gatewayConfig}
+        health={health}
+        lastError={errorMessage}
+      />
+
       <main className="mx-auto w-full max-w-[412px] px-5">
         {/* 頂部建築極簡標題區（無圖示，右側三條不等長細線） */}
         <header className="flex items-center justify-between pt-2 pb-5">
@@ -187,9 +213,14 @@ export function App() {
               <h1 className="dj-serif text-2xl font-semibold tracking-[0.14em] text-[#F4F4F0]">
                 <MaskedTitle key={`zh-${titleAnimKey}`} text="繪師" revealed={revealed} />
               </h1>
-              <span className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C]">
-                v1.0
-              </span>
+              <button
+                type="button"
+                onClick={handleVersionSecretTap}
+                className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] bg-transparent cursor-pointer select-none"
+                data-testid="version-secret-trigger"
+              >
+                v1.1
+              </button>
             </div>
             <p className="dj-display text-xs text-[#9A9E9C] tracking-[0.12em]">
               <MaskedTitle key={`en-${titleAnimKey}`} text="HUISHI AI STUDIO" revealed={revealed} />
