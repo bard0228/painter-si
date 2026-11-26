@@ -8,6 +8,19 @@ export function nowTaipeiIso(): string {
 
 export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>[] = [
   {
+    id: 'preset-img-washi-collage',
+    name: '日系和紙幾何拼貼',
+    type: 'image',
+    positivePromptTemplate:
+      '{prompt}, Japanese minimalist editorial illustration, flat geometric paper-cut collage style, clean angular faceted polygon planes, overlapping translucent matte gouache shapes, no black outlines, soft muted Morandi earth palette with warm off-white washi paper background, dusty sage green, muted slate blue and warm ochre, gentle diffused natural daylight, serene quiet atmosphere, subtle fine cotton paper grain texture, generous negative space',
+    negativePromptTemplate:
+      'photorealistic, photograph, 3d render, glossy, shiny, black outlines, thick ink lines, harsh contrast, neon colors, oversaturated, text, typography, watermark, signature, messy brushstrokes, anime shading',
+    sampler: 'euler_ancestral',
+    steps: 24,
+    cfgScale: 6.0,
+    loraName: '',
+  },
+  {
     id: 'preset-img-watercolor',
     name: '日系繪本水彩',
     type: 'image',
