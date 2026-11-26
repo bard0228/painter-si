@@ -21,6 +21,58 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     loraName: '',
   },
   {
+    id: 'preset-img-lora-luminous-anime',
+    name: '光影動漫',
+    type: 'image',
+    positivePromptTemplate:
+      '{prompt}, ethereal anime illustration, breathtaking dramatic lighting, volumetric god rays, glowing rim light, luminous atmospheric depth, delicate anime character, shimmering particles, masterpiece, high detail',
+    negativePromptTemplate:
+      'photorealistic, 3d render, flat lighting, muddy colors, lowres, bad anatomy, extra fingers, blurry, watermark, text',
+    sampler: 'euler_ancestral',
+    steps: 26,
+    cfgScale: 6.5,
+    loraName: '光影動漫.safetensors',
+  },
+  {
+    id: 'preset-img-lora-cosmic-anime',
+    name: '唯美宇宙',
+    type: 'image',
+    positivePromptTemplate:
+      '{prompt}, ethereal anime art, vast cosmic night sky, glowing full moon, sparkling starry nebula, infinite tranquil space atmosphere, dreamy celestial light, delicate anime character, cinematic wide composition, masterpiece',
+    negativePromptTemplate:
+      'photorealistic, 3d render, cluttered background, harsh daytime, lowres, bad anatomy, blurry, watermark, text',
+    sampler: 'euler_ancestral',
+    steps: 26,
+    cfgScale: 6.5,
+    loraName: '唯美宇宙.safetensors',
+  },
+  {
+    id: 'preset-img-lora-realistic',
+    name: '寫實風',
+    type: 'image',
+    positivePromptTemplate:
+      '{prompt}, ultra-realistic photography, natural authentic lighting, lifelike textures, crisp fine details, natural color grading, shallow depth of field, DSLR 50mm lens, photorealistic masterpiece',
+    negativePromptTemplate:
+      'anime, cartoon, illustration, painting, 3d cgi, plastic skin, oversaturated, lowres, blurry, deformed, watermark, text',
+    sampler: 'dpmpp_2m',
+    steps: 28,
+    cfgScale: 5.5,
+    loraName: '寫實風.safetensors',
+  },
+  {
+    id: 'preset-img-lora-game-anime',
+    name: '遊戲動漫',
+    type: 'image',
+    positivePromptTemplate:
+      '{prompt}, high-budget JRPG game CG illustration, vibrant anime character art, dynamic polished shading, crisp cel-shaded details, rich fantasy game environment, official game key visual quality, masterpiece',
+    negativePromptTemplate:
+      'photorealistic, photograph, dull colors, sketch, rough lines, lowres, bad anatomy, blurry, watermark, UI HUD text',
+    sampler: 'euler_ancestral',
+    steps: 26,
+    cfgScale: 6.5,
+    loraName: '遊戲動漫.safetensors',
+  },
+  {
     id: 'preset-img-watercolor',
     name: '日系繪本水彩',
     type: 'image',
