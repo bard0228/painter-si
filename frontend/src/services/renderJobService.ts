@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -56,6 +57,17 @@ export function subscribeRenderJobs(
   );
 }
 
+export async function fetchRenderJobsOnce(useCloud: boolean): Promise<RenderJob[]> {
+  if (!useCloud || !db || !isFirebaseConfigured) {
+    return readLocalJobs();
+  }
+  const q = query(collection(db, 'renderJobs'), orderBy('updatedAt', 'desc'), limit(20));
+  const snap = await getDocs(q);
+  const list: RenderJob[] = [];
+  snap.forEach((d) => list.push(d.data() as RenderJob));
+  return list;
+}
+
 export async function submitSingleImageRenderJob(params: {
   useCloud: boolean;
   gatewayUrl?: string;
@@ -82,6 +94,8 @@ export async function submitSingleImageRenderJob(params: {
     kind: 'single_image',
     prompt: prompt.trim(),
     stylePresetId: stylePreset.id,
+    stylePresetName: stylePreset.name,
+    checkpointName: stylePreset.checkpointName || '',
     aspectRatio,
     orientation,
     status: 'queued',
@@ -154,6 +168,8 @@ export async function submitImageEditJob(params: {
     sourceJobId: sourceJob.id,
     prompt: prompt.trim(),
     stylePresetId: stylePreset.id,
+    stylePresetName: stylePreset.name,
+    checkpointName: stylePreset.checkpointName || sourceJob.checkpointName || '',
     aspectRatio: sourceJob.aspectRatio,
     orientation: sourceJob.orientation,
     status: 'queued',

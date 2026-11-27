@@ -55,6 +55,8 @@ export interface RenderJob {
   sourceJobId?: string;
   prompt?: string;
   stylePresetId?: string;
+  stylePresetName?: string;
+  checkpointName?: string;
   aspectRatio?: string;
   orientation?: 'portrait' | 'landscape';
   status: RenderJobStatus;

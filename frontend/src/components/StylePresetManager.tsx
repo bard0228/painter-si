@@ -193,7 +193,6 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
           type="button"
           onClick={() => {
             setIsFormOpen(false);
-            setEditingId(null);
           }}
           className="min-h-[48px] min-w-[48px] text-xs tracking-widest text-[#9A9E9C] hover:text-[#F4F4F0]"
         >
@@ -437,58 +436,60 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
             const isEditingThis = isFormOpen && editingId === preset.id;
             return (
               <div key={preset.id} className="space-y-2">
-                {isEditingThis ? (
-                  <div className="dj-panel-reveal">{renderPresetForm()}</div>
-                ) : (
-                  <div className="dj-surface-card p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="dj-tnum text-[11px] text-[#6E7371]">
-                            {String(idx + 1).padStart(2, '0')}
-                          </span>
-                          <h3 className="dj-serif text-sm font-semibold text-[#F4F4F0] truncate">
-                            {preset.name}
-                          </h3>
-                        </div>
-                        <p className="dj-tnum text-[11px] text-[#9A9E9C] mt-1">
-                          {preset.sampler} / {preset.steps} steps / CFG {preset.cfgScale}
-                        </p>
+                <div className="dj-surface-card p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="dj-tnum text-[11px] text-[#6E7371]">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <h3 className="dj-serif text-sm font-semibold text-[#F4F4F0] truncate">
+                          {preset.name}
+                        </h3>
                       </div>
-                      <span className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] shrink-0">
-                        {preset.type === 'image' ? 'IMG' : 'VID'}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-[#9A9E9C] line-clamp-2 leading-relaxed bg-[#0E0F12] p-2.5 border border-white/10">
-                      {preset.positivePromptTemplate}
-                    </p>
-
-                    {preset.loraName && (
-                      <p className="text-[11px] text-[#4C7C62] truncate">
-                        LoRA / {preset.loraName}
+                      <p className="dj-tnum text-[11px] text-[#9A9E9C] mt-1">
+                        {preset.sampler} / {preset.steps} steps / CFG {preset.cfgScale}
                       </p>
-                    )}
-
-                    <div className="flex items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(preset)}
-                        className="min-h-[48px] min-w-[68px] px-3 border border-white/14 text-xs tracking-widest text-[#F4F4F0] hover:border-white/35 active:scale-[0.96] transition-all"
-                      >
-                        編輯
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDelete(preset)}
-                        className="min-h-[48px] min-w-[68px] px-3 border border-[#B86B4B]/50 text-xs tracking-widest text-[#B86B4B] hover:border-[#B86B4B] active:scale-[0.96] transition-all"
-                        data-testid={`delete-preset-${preset.id}`}
-                      >
-                        刪除
-                      </button>
                     </div>
+                    <span className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] shrink-0">
+                      {preset.type === 'image' ? 'IMG' : 'VID'}
+                    </span>
                   </div>
-                )}
+
+                  <p className="text-xs text-[#9A9E9C] line-clamp-2 leading-relaxed bg-[#0E0F12] p-2.5 border border-white/10">
+                    {preset.positivePromptTemplate}
+                  </p>
+
+                  {preset.loraName && (
+                    <p className="text-[11px] text-[#4C7C62] truncate">
+                      LoRA / {preset.loraName}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => (isEditingThis ? setIsFormOpen(false) : openEdit(preset))}
+                      className="min-h-[48px] min-w-[68px] px-3 border border-white/14 text-xs tracking-widest text-[#F4F4F0] hover:border-white/35 active:scale-[0.96] transition-all"
+                    >
+                      {isEditingThis ? '收合' : '編輯'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(preset)}
+                      className="min-h-[48px] min-w-[68px] px-3 border border-[#B86B4B]/50 text-xs tracking-widest text-[#B86B4B] hover:border-[#B86B4B] active:scale-[0.96] transition-all"
+                      data-testid={`delete-preset-${preset.id}`}
+                    >
+                      刪除
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`dj-accordion ${isEditingThis ? 'is-open' : ''}`}>
+                  <div className="dj-accordion-inner">
+                    {editingId === preset.id && renderPresetForm()}
+                  </div>
+                </div>
               </div>
             );
           })

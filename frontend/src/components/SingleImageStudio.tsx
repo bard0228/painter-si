@@ -4,6 +4,7 @@ import { isFirebaseConfigured } from '../config/firebase';
 import { subscribeStylePresets } from '../services/stylePresetService';
 import {
   deleteRenderJob,
+  fetchRenderJobsOnce,
   submitImageEditJob,
   subscribeRenderJobs,
   submitSingleImageRenderJob,
@@ -70,7 +71,25 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
       (items) => setJobs(items.filter((j) => j.kind === 'single_image')),
       (err) => setError(`讀取算圖紀錄失敗：${err.message}`)
     );
-    return () => unsub();
+
+    const syncOnResume = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchRenderJobsOnce(useCloud)
+          .then((items) => setJobs(items.filter((j) => j.kind === 'single_image')))
+          .catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', syncOnResume);
+    window.addEventListener('focus', syncOnResume);
+    window.addEventListener('online', syncOnResume);
+
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', syncOnResume);
+      window.removeEventListener('focus', syncOnResume);
+      window.removeEventListener('online', syncOnResume);
+    };
   }, [useCloud]);
 
   const selectedPreset = useMemo(
@@ -351,11 +370,39 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
                   <span className="dj-tnum text-[11px] text-[#6E7371] block truncate">
                     {job.id}
                   </span>
-                  {job.aspectRatio && (
-                    <span className="dj-tnum text-[10px] text-[#9A9E9C]">
-                      {job.aspectRatio} / {job.orientation === 'landscape' ? '橫式' : '直式'}
-                    </span>
-                  )}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                    {job.aspectRatio && (
+                      <span className="dj-tnum text-[10px] text-[#9A9E9C]">
+                        {job.aspectRatio} / {job.orientation === 'landscape' ? '橫式' : '直式'}
+                      </span>
+                    )}
+                    {(job.stylePresetName ||
+                      presets.find((p) => p.id === job.stylePresetId)?.name) && (
+                      <span className="text-[10px] px-1.5 py-0.5 border border-white/14 text-[#F4F4F0]/80">
+                        風格：{job.stylePresetName || presets.find((p) => p.id === job.stylePresetId)?.name}
+                      </span>
+                    )}
+                    {(() => {
+                      const rawCkpt =
+                        job.checkpointName ||
+                        presets.find((p) => p.id === job.stylePresetId)?.checkpointName ||
+                        '';
+                      if (!rawCkpt) return null;
+                      const label =
+                        rawCkpt === FLUX_CHECKPOINT
+                          ? 'FLUX.1-dev FP8'
+                          : rawCkpt === REALISTIC_CHECKPOINT
+                            ? 'RealVisXL V5.0'
+                            : rawCkpt === ANIME_CHECKPOINT
+                              ? 'Animagine XL 3.1'
+                              : rawCkpt.replace(/\.safetensors$/i, '');
+                      return (
+                        <span className="dj-tnum text-[10px] px-1.5 py-0.5 border border-[#4C7C62]/50 text-[#4C7C62]">
+                          底模：{label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span

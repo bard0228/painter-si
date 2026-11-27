@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -227,87 +228,92 @@ class RenderEditRequest(BaseModel):
     mask_base64: Optional[str] = None
 
 
+_gpu_render_lock = threading.Lock()
+
+
 def _execute_single_image_job(req: RenderImageRequest) -> None:
-    update_render_job_doc(
-        req.job_id,
-        {
-            "status": "processing",
-            "progress": 20,
-            "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-        },
-    )
-    try:
-        gpu_info = detect_gpu_vram()
-        result = _txt2img_runner(
-            job_id=req.job_id,
-            prompt_text=req.prompt,
-            style_preset=req.style_preset,
-            vram_mode=gpu_info["vram_mode"],
-            aspect_ratio=req.aspect_ratio,
-            orientation=req.orientation,
-        )
+    with _gpu_render_lock:
         update_render_job_doc(
             req.job_id,
             {
-                "status": "completed",
-                "progress": 100,
-                "outputDrivePath": result["output_drive_path"],
-                "thumbnailWebp": result["thumbnail_webp"],
+                "status": "processing",
+                "progress": 20,
                 "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
             },
         )
-    except Exception as exc:
-        update_render_job_doc(
-            req.job_id,
-            {
-                "status": "failed",
-                "progress": 0,
-                "errorMessage": str(exc),
-                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-            },
-        )
+        try:
+            gpu_info = detect_gpu_vram()
+            result = _txt2img_runner(
+                job_id=req.job_id,
+                prompt_text=req.prompt,
+                style_preset=req.style_preset,
+                vram_mode=gpu_info["vram_mode"],
+                aspect_ratio=req.aspect_ratio,
+                orientation=req.orientation,
+            )
+            update_render_job_doc(
+                req.job_id,
+                {
+                    "status": "completed",
+                    "progress": 100,
+                    "outputDrivePath": result["output_drive_path"],
+                    "thumbnailWebp": result["thumbnail_webp"],
+                    "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                },
+            )
+        except Exception as exc:
+            update_render_job_doc(
+                req.job_id,
+                {
+                    "status": "failed",
+                    "progress": 0,
+                    "errorMessage": str(exc),
+                    "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                },
+            )
 
 
 def _execute_edit_image_job(req: RenderEditRequest) -> None:
-    update_render_job_doc(
-        req.job_id,
-        {
-            "status": "processing",
-            "progress": 20,
-            "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-        },
-    )
-    try:
-        gpu_info = detect_gpu_vram()
-        result = _edit_runner(
-            job_id=req.job_id,
-            source_drive_path=req.source_drive_path,
-            prompt_text=req.prompt,
-            style_preset=req.style_preset,
-            denoise=req.denoise,
-            mask_base64=req.mask_base64,
-            vram_mode=gpu_info["vram_mode"],
-        )
+    with _gpu_render_lock:
         update_render_job_doc(
             req.job_id,
             {
-                "status": "completed",
-                "progress": 100,
-                "outputDrivePath": result["output_drive_path"],
-                "thumbnailWebp": result["thumbnail_webp"],
+                "status": "processing",
+                "progress": 20,
                 "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
             },
         )
-    except Exception as exc:
-        update_render_job_doc(
-            req.job_id,
-            {
-                "status": "failed",
-                "progress": 0,
-                "errorMessage": str(exc),
-                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-            },
-        )
+        try:
+            gpu_info = detect_gpu_vram()
+            result = _edit_runner(
+                job_id=req.job_id,
+                source_drive_path=req.source_drive_path,
+                prompt_text=req.prompt,
+                style_preset=req.style_preset,
+                denoise=req.denoise,
+                mask_base64=req.mask_base64,
+                vram_mode=gpu_info["vram_mode"],
+            )
+            update_render_job_doc(
+                req.job_id,
+                {
+                    "status": "completed",
+                    "progress": 100,
+                    "outputDrivePath": result["output_drive_path"],
+                    "thumbnailWebp": result["thumbnail_webp"],
+                    "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                },
+            )
+        except Exception as exc:
+            update_render_job_doc(
+                req.job_id,
+                {
+                    "status": "failed",
+                    "progress": 0,
+                    "errorMessage": str(exc),
+                    "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                },
+            )
 
 
 app = FastAPI(title="繪師 BackendGateway", version="1.3.0")
