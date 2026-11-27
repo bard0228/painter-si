@@ -12,15 +12,20 @@ import type { StylePreset, StylePresetType } from '../types/domain';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
 
-import { ANIME_CHECKPOINT, REALISTIC_CHECKPOINT } from '../data/defaultStylePresets';
+import {
+  ANIME_CHECKPOINT,
+  FLUX_CHECKPOINT,
+  REALISTIC_CHECKPOINT,
+} from '../data/defaultStylePresets';
 
 interface StylePresetManagerProps {
   user: User | null;
 }
 
 const CHECKPOINT_OPTIONS = [
-  { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫）' },
-  { value: REALISTIC_CHECKPOINT, label: 'Juggernaut XL v9（電影 / 真實寫實）' },
+  { value: FLUX_CHECKPOINT, label: 'FLUX.1-dev FP8（寫實人像 / 風景天花板）' },
+  { value: REALISTIC_CHECKPOINT, label: 'RealVisXL V5.0（SDXL 最強寫實 / 相容寫實 LoRA）' },
+  { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫天花板）' },
 ];
 
 const SAMPLER_OPTIONS = [

@@ -9,7 +9,11 @@ import {
   submitSingleImageRenderJob,
 } from '../services/renderJobService';
 import type { GatewayConfig, RenderJob, StylePreset } from '../types/domain';
-import { ANIME_CHECKPOINT, REALISTIC_CHECKPOINT } from '../data/defaultStylePresets';
+import {
+  ANIME_CHECKPOINT,
+  FLUX_CHECKPOINT,
+  REALISTIC_CHECKPOINT,
+} from '../data/defaultStylePresets';
 import { translatePromptToEnglish } from '../services/promptTranslator';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -223,10 +227,17 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
             options={[
               {
                 value: '',
-                label: `跟隨風格預設（${selectedPreset?.checkpointName === REALISTIC_CHECKPOINT ? 'Juggernaut XL v9' : 'Animagine XL 3.1'}）`,
+                label: `跟隨風格預設（${
+                  selectedPreset?.checkpointName === FLUX_CHECKPOINT
+                    ? 'FLUX.1-dev FP8'
+                    : selectedPreset?.checkpointName === REALISTIC_CHECKPOINT
+                      ? 'RealVisXL V5.0'
+                      : 'Animagine XL 3.1'
+                }）`,
               },
-              { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫）' },
-              { value: REALISTIC_CHECKPOINT, label: 'Juggernaut XL v9（電影 / 真實寫實）' },
+              { value: FLUX_CHECKPOINT, label: 'FLUX.1-dev FP8（寫實人像 / 風景天花板）' },
+              { value: REALISTIC_CHECKPOINT, label: 'RealVisXL V5.0（SDXL 最強寫實 / 相容 LoRA）' },
+              { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫天花板）' },
             ]}
           />
         </div>

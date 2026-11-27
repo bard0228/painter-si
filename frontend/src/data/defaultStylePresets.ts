@@ -1,7 +1,8 @@
 import type { StylePreset } from '../types/domain';
 
 export const ANIME_CHECKPOINT = 'animagine-xl-3.1.safetensors';
-export const REALISTIC_CHECKPOINT = 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors';
+export const REALISTIC_CHECKPOINT = 'RealVisXL_V5.0_fp16.safetensors';
+export const FLUX_CHECKPOINT = 'flux1-dev-fp8.safetensors';
 
 export function nowTaipeiIso(): string {
   const now = new Date();

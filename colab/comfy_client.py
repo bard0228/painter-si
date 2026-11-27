@@ -25,7 +25,8 @@ OUTPUT_DIR = Path(
 )
 
 ANIME_CKPT = os.getenv("HUISHI_CKPT_ANIME", "animagine-xl-3.1.safetensors")
-REALISTIC_CKPT = os.getenv("HUISHI_CKPT_REALISTIC", "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors")
+REALISTIC_CKPT = os.getenv("HUISHI_CKPT_REALISTIC", "RealVisXL_V5.0_fp16.safetensors")
+FLUX_CKPT = os.getenv("HUISHI_CKPT_FLUX", "flux1-dev-fp8.safetensors")
 HIGH_VRAM_CKPT = os.getenv("HUISHI_CKPT_HIGH", ANIME_CKPT)
 LOW_VRAM_CKPT = os.getenv("HUISHI_CKPT_LOW", ANIME_CKPT)
 
@@ -41,7 +42,7 @@ def resolve_dimensions(
     aspect_ratio: str = "1:1",
     orientation: str = "portrait",
 ) -> tuple[int, int]:
-    """Resolve SDXL-native width and height from aspect ratio and portrait/landscape orientation."""
+    """Resolve SDXL/FLUX-native width and height from aspect ratio and portrait/landscape orientation."""
     base_w, base_h = ASPECT_RATIO_BUCKETS.get(aspect_ratio, (1024, 1024))
     if orientation == "landscape" and base_w < base_h:
         return base_h, base_w
@@ -61,17 +62,23 @@ def adapt_sampler_params_for_checkpoint(
     sampler: str,
     steps: int,
     cfg: float,
-) -> tuple[str, int, float]:
+) -> tuple[str, str, int, float]:
     """
-    Auto-adapt sampling parameters so SDXL Turbo never receives high steps/CFG
-    that cause over-fried/oversaturated outputs, while flagship SDXL models keep full quality.
+    Auto-adapt sampling parameters (sampler, scheduler, steps, cfg):
+    - FLUX.1-dev FP8: euler + simple scheduler + CFG 1.0 + steps <= 24
+    - SDXL Turbo: euler_ancestral + normal + steps <= 8 + CFG <= 1.8
+    - SDXL (Animagine / RealVisXL): preserve full user parameters
     """
-    if "turbo" in ckpt_name.lower():
+    lower = ckpt_name.lower()
+    if "flux" in lower:
+        safe_steps = max(16, min(steps, 24))
+        return "euler", "simple", safe_steps, 1.0
+    if "turbo" in lower:
         safe_steps = max(4, min(steps, 8)) if steps > 10 else max(1, steps)
         safe_cfg = min(cfg, 1.8) if cfg > 2.5 else max(1.0, cfg)
         safe_sampler = "euler_ancestral" if sampler in ("dpmpp_2m", "dpmpp_2m_sde") else sampler
-        return safe_sampler, safe_steps, safe_cfg
-    return sampler, steps, cfg
+        return safe_sampler, "normal", safe_steps, safe_cfg
+    return sampler, "normal", steps, cfg
 
 
 def build_txt2img_workflow(
@@ -82,17 +89,18 @@ def build_txt2img_workflow(
     aspect_ratio: str = "1:1",
     orientation: str = "portrait",
 ) -> dict[str, Any]:
-    """Build ComfyUI API workflow JSON with checkpoint selection and aspect ratio/orientation."""
+    """Build ComfyUI API workflow JSON with FLUX / RealVisXL / Animagine support."""
     pos_tpl = style_preset.get("positivePromptTemplate") or "{prompt}"
     positive = pos_tpl.replace("{prompt}", prompt_text) if "{prompt}" in pos_tpl else f"{prompt_text}, {pos_tpl}"
-    negative = style_preset.get("negativePromptTemplate") or "lowres, blurry, watermark"
+    negative = style_preset.get("negativePromptTemplate") or ""
     raw_sampler = style_preset.get("sampler") or "euler_ancestral"
     raw_steps = int(style_preset.get("steps") or 26)
     raw_cfg = float(style_preset.get("cfgScale") or 6.5)
     lora_name = (style_preset.get("loraName") or "").strip()
 
     ckpt_name = resolve_checkpoint_name(style_preset, vram_mode=vram_mode)
-    sampler, steps, cfg = adapt_sampler_params_for_checkpoint(
+    is_flux = "flux" in ckpt_name.lower()
+    sampler, scheduler, steps, cfg = adapt_sampler_params_for_checkpoint(
         ckpt_name, raw_sampler, raw_steps, raw_cfg
     )
     width, height = resolve_dimensions(aspect_ratio=aspect_ratio, orientation=orientation)
@@ -117,7 +125,7 @@ def build_txt2img_workflow(
                 "steps": steps,
                 "cfg": cfg,
                 "sampler_name": sampler,
-                "scheduler": "normal",
+                "scheduler": scheduler,
                 "denoise": 1.0,
                 "model": model_ref,
                 "positive": ["2", 0],
@@ -135,7 +143,8 @@ def build_txt2img_workflow(
         },
     }
 
-    if lora_name:
+    # Skip SDXL LoRAs when running FLUX to prevent tensor shape mismatch
+    if lora_name and not is_flux:
         workflow["8"] = {
             "class_type": "LoraLoader",
             "inputs": {
@@ -155,7 +164,7 @@ def build_txt2img_workflow(
     }
     workflow["3"] = {
         "class_type": "CLIPTextEncode",
-        "inputs": {"text": negative, "clip": clip_ref},
+        "inputs": {"text": "" if is_flux else negative, "clip": clip_ref},
     }
 
     return workflow
@@ -180,7 +189,8 @@ def build_edit_workflow(
     lora_name = (style_preset.get("loraName") or "").strip()
 
     ckpt_name = resolve_checkpoint_name(style_preset, vram_mode=vram_mode)
-    sampler, steps, cfg = adapt_sampler_params_for_checkpoint(
+    is_flux = "flux" in ckpt_name.lower()
+    sampler, scheduler, steps, cfg = adapt_sampler_params_for_checkpoint(
         ckpt_name, raw_sampler, raw_steps, raw_cfg
     )
     safe_denoise = max(0.15, min(float(denoise), 1.0))
@@ -231,7 +241,7 @@ def build_edit_workflow(
             "steps": steps,
             "cfg": cfg,
             "sampler_name": sampler,
-            "scheduler": "normal",
+            "scheduler": scheduler,
             "denoise": safe_denoise,
             "model": model_ref,
             "positive": ["2", 0],
@@ -240,7 +250,7 @@ def build_edit_workflow(
         },
     }
 
-    if lora_name:
+    if lora_name and not is_flux:
         workflow["8"] = {
             "class_type": "LoraLoader",
             "inputs": {
@@ -260,7 +270,7 @@ def build_edit_workflow(
     }
     workflow["3"] = {
         "class_type": "CLIPTextEncode",
-        "inputs": {"text": negative, "clip": clip_ref},
+        "inputs": {"text": "" if is_flux else negative, "clip": clip_ref},
     }
 
     return workflow
