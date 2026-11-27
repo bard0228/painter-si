@@ -9,6 +9,7 @@ import {
   submitSingleImageRenderJob,
 } from '../services/renderJobService';
 import type { GatewayConfig, RenderJob, StylePreset } from '../types/domain';
+import { ANIME_CHECKPOINT, REALISTIC_CHECKPOINT } from '../data/defaultStylePresets';
 import { translatePromptToEnglish } from '../services/promptTranslator';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -33,6 +34,7 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   const useCloud = Boolean(user && isFirebaseConfigured);
   const [presets, setPresets] = useState<StylePreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [checkpointOverride, setCheckpointOverride] = useState<string>('');
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<string>('1:1');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -100,12 +102,15 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
       if (translated) {
         setStatusMsg(`已自動翻譯為英文提示詞：${englishPrompt}`);
       }
+      const effectivePreset: StylePreset = checkpointOverride
+        ? { ...selectedPreset, checkpointName: checkpointOverride }
+        : selectedPreset;
       const created = await submitSingleImageRenderJob({
         useCloud,
         gatewayUrl: gatewayConfig?.url,
         user,
         prompt: englishPrompt,
-        stylePreset: selectedPreset,
+        stylePreset: effectivePreset,
         aspectRatio,
         orientation,
       });
@@ -207,6 +212,22 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
               value: p.id,
               label: `${p.name} (${p.sampler} / ${p.steps} steps)`,
             }))}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <span className="text-xs text-[#9A9E9C] block">主力底模 (Checkpoint)</span>
+          <ArchSelect
+            value={checkpointOverride}
+            onChange={setCheckpointOverride}
+            options={[
+              {
+                value: '',
+                label: `跟隨風格預設（${selectedPreset?.checkpointName === REALISTIC_CHECKPOINT ? 'Juggernaut XL v9' : 'Animagine XL 3.1'}）`,
+              },
+              { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫）' },
+              { value: REALISTIC_CHECKPOINT, label: 'Juggernaut XL v9（電影 / 真實寫實）' },
+            ]}
           />
         </div>
 

@@ -35,7 +35,7 @@ const EMPTY_FORM = (type: StylePresetType): StylePresetInput => ({
   name: '',
   type,
   positivePromptTemplate: '{prompt}, ',
-  negativePromptTemplate: 'lowres, blurry, watermark, deformed',
+  negativePromptTemplate: '',
   sampler: type === 'image' ? 'euler_ancestral' : 'euler',
   steps: type === 'image' ? 26 : 20,
   cfgScale: type === 'image' ? 6.5 : 6.0,
