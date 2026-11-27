@@ -90,9 +90,10 @@ export async function saveStylePreset(
     type: input.type,
     positivePromptTemplate: input.positivePromptTemplate.trim(),
     negativePromptTemplate: input.negativePromptTemplate.trim(),
-    sampler: input.sampler.trim() || 'euler',
-    steps: Number(input.steps) || 24,
+    sampler: input.sampler.trim() || 'euler_ancestral',
+    steps: Number(input.steps) || 26,
     cfgScale: Number(input.cfgScale) || 6.5,
+    checkpointName: (input.checkpointName || '').trim(),
     loraName: (input.loraName || '').trim(),
     createdAt: input.createdAt || ts,
     updatedAt: ts,
@@ -125,29 +126,31 @@ export async function deleteStylePreset(useCloud: boolean, id: string): Promise<
 
 export async function seedDefaultStylePresets(
   useCloud: boolean,
-  existingIds: Set<string>
+  _existingIds: Set<string>
 ): Promise<StylePreset[]> {
   const ts = nowTaipeiIso();
-  const toInsert = DEFAULT_STYLE_PRESETS.filter((p) => !existingIds.has(p.id)).map((p) => ({
+  const toUpsert = DEFAULT_STYLE_PRESETS.map((p) => ({
     ...p,
     createdAt: ts,
     updatedAt: ts,
   }));
 
-  if (toInsert.length === 0) return [];
-
   if (useCloud && db && isFirebaseConfigured) {
     const firestore = db;
     await Promise.all(
-      toInsert.map((preset) =>
+      toUpsert.map((preset) =>
         setDoc(doc(firestore, 'stylePresets', preset.id), preset, { merge: true })
       )
     );
-    return toInsert;
+    return toUpsert;
   }
 
-  const list = readLocalPresets();
-  const merged = [...toInsert, ...list];
+  const existing = readLocalPresets();
+  const byId = new Map(existing.map((p) => [p.id, p]));
+  for (const p of toUpsert) {
+    byId.set(p.id, p);
+  }
+  const merged = Array.from(byId.values());
   writeLocalPresets(merged);
-  return toInsert;
+  return toUpsert;
 }

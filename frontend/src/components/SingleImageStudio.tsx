@@ -4,6 +4,7 @@ import { isFirebaseConfigured } from '../config/firebase';
 import { subscribeStylePresets } from '../services/stylePresetService';
 import {
   deleteRenderJob,
+  submitImageEditJob,
   subscribeRenderJobs,
   submitSingleImageRenderJob,
 } from '../services/renderJobService';
@@ -11,11 +12,19 @@ import type { GatewayConfig, RenderJob, StylePreset } from '../types/domain';
 import { translatePromptToEnglish } from '../services/promptTranslator';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ImageEditModal } from './ImageEditModal';
 
 interface SingleImageStudioProps {
   user: User | null;
   gatewayConfig: GatewayConfig | null;
 }
+
+const ASPECT_RATIOS = [
+  { id: '1:1', portrait: '1024×1024', landscape: '1024×1024' },
+  { id: '3:4', portrait: '896×1152', landscape: '1152×896' },
+  { id: '2:3', portrait: '832×1216', landscape: '1216×832' },
+  { id: '9:16', portrait: '768×1344', landscape: '1344×768' },
+] as const;
 
 export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   user,
@@ -25,9 +34,12 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   const [presets, setPresets] = useState<StylePreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [prompt, setPrompt] = useState('');
+  const [aspectRatio, setAspectRatio] = useState<string>('1:1');
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<RenderJob | null>(null);
+  const [editingJob, setEditingJob] = useState<RenderJob | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +72,11 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
     [presets, selectedPresetId]
   );
 
+  const activeResolution = useMemo(() => {
+    const found = ASPECT_RATIOS.find((r) => r.id === aspectRatio) || ASPECT_RATIOS[0];
+    return orientation === 'landscape' ? found.landscape : found.portrait;
+  }, [aspectRatio, orientation]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) {
@@ -89,6 +106,8 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
         user,
         prompt: englishPrompt,
         stylePreset: selectedPreset,
+        aspectRatio,
+        orientation,
       });
       if (!useCloud) {
         setJobs((prev) => [created, ...prev]);
@@ -99,6 +118,36 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEditSubmit = async (payload: {
+    sourceJob: RenderJob;
+    prompt: string;
+    stylePreset: StylePreset;
+    denoise: number;
+    maskBase64: string | null;
+  }) => {
+    if (useCloud && !gatewayConfig?.url) {
+      throw new Error('Colab BackendGateway 尚未連線，無法送出改圖任務');
+    }
+    const created = await submitImageEditJob({
+      useCloud,
+      gatewayUrl: gatewayConfig?.url,
+      user,
+      sourceJob: payload.sourceJob,
+      prompt: payload.prompt,
+      stylePreset: payload.stylePreset,
+      denoise: payload.denoise,
+      maskBase64: payload.maskBase64,
+    });
+    if (!useCloud) {
+      setJobs((prev) => [created, ...prev]);
+    }
+    setStatusMsg(
+      payload.maskBase64
+        ? `已送出局部塗抹重繪任務 (${created.id})`
+        : `已送出全圖微調任務 (${created.id})`
+    );
   };
 
   const confirmDeleteJob = async () => {
@@ -124,6 +173,15 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
         message={`確定要刪除這筆紀錄「${pendingDelete?.prompt || pendingDelete?.id || ''}」嗎？`}
         onConfirm={confirmDeleteJob}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ImageEditModal
+        open={Boolean(editingJob)}
+        sourceJob={editingJob}
+        presets={presets}
+        defaultPresetId={selectedPreset?.id || ''}
+        onClose={() => setEditingJob(null)}
+        onSubmitEdit={handleEditSubmit}
       />
 
       <div className="flex items-center justify-between border-b border-white/14 pb-3">
@@ -166,6 +224,59 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
           />
         </label>
 
+        {/* 照片比例與直橫方向選擇 */}
+        <div className="space-y-2 pt-0.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#9A9E9C]">照片尺寸比例與方向</span>
+            <span className="dj-tnum text-[11px] text-[#6E7371]">{activeResolution}</span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            {ASPECT_RATIOS.map((r) => {
+              const active = aspectRatio === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setAspectRatio(r.id)}
+                  className={`dj-tnum min-h-[48px] border text-xs font-medium transition-all active:scale-[0.96] ${
+                    active
+                      ? 'bg-[#F4F4F0] text-[#0E0F12] border-[#F4F4F0]'
+                      : 'bg-[#0E0F12] text-[#9A9E9C] border-white/14 hover:border-white/30'
+                  }`}
+                >
+                  {r.id}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'portrait' as const, label: '直式 (Portrait)' },
+              { id: 'landscape' as const, label: '橫式 (Landscape)' },
+            ].map((o) => {
+              const active = orientation === o.id;
+              const disabled = aspectRatio === '1:1';
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setOrientation(o.id)}
+                  className={`min-h-[48px] border text-xs font-medium tracking-wider transition-all active:scale-[0.96] disabled:opacity-40 ${
+                    active && !disabled
+                      ? 'bg-white/15 text-[#F4F4F0] border-white/45'
+                      : 'bg-[#0E0F12] text-[#9A9E9C] border-white/14'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {statusMsg && (
           <div className="dj-panel-reveal p-3 border border-[#4C7C62] bg-[#4C7C62]/10 text-xs text-[#4C7C62] break-words">
             {statusMsg}
@@ -204,7 +315,16 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
           jobs.map((job) => (
             <div key={job.id} className="dj-surface-card p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="dj-tnum text-[11px] text-[#6E7371] truncate">{job.id}</span>
+                <div className="min-w-0">
+                  <span className="dj-tnum text-[11px] text-[#6E7371] block truncate">
+                    {job.id}
+                  </span>
+                  {job.aspectRatio && (
+                    <span className="dj-tnum text-[10px] text-[#9A9E9C]">
+                      {job.aspectRatio} / {job.orientation === 'landscape' ? '橫式' : '直式'}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span
                     className={`dj-tnum text-[10px] tracking-widest px-2 py-0.5 border ${
@@ -248,10 +368,20 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
                 </div>
               )}
 
-              {job.outputDrivePath && (
-                <p className="dj-tnum text-[11px] text-[#9A9E9C] truncate">
-                  DRIVE / {job.outputDrivePath}
-                </p>
+              {job.status === 'completed' && job.outputDrivePath && (
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="dj-tnum text-[11px] text-[#9A9E9C] truncate">
+                    DRIVE / {job.outputDrivePath}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingJob(job)}
+                    className="min-h-[48px] px-3 border border-white/25 text-xs tracking-widest text-[#F4F4F0] hover:border-white/50 active:scale-[0.96] transition-all shrink-0"
+                    data-testid={`edit-job-${job.id}`}
+                  >
+                    微調 / 重繪
+                  </button>
+                </div>
               )}
 
               {job.errorMessage && (

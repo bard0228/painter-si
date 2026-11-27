@@ -14,6 +14,7 @@ export interface StylePreset {
   sampler: string;
   steps: number;
   cfgScale: number;
+  checkpointName?: string;
   loraName?: string;
   createdAt: string;
   updatedAt: string;
@@ -51,8 +52,11 @@ export interface RenderJob {
   id: string;
   kind: 'single_image' | 'storyboard_batch' | 'ffmpeg_export';
   storyboardId?: string;
+  sourceJobId?: string;
   prompt?: string;
   stylePresetId?: string;
+  aspectRatio?: string;
+  orientation?: 'portrait' | 'landscape';
   status: RenderJobStatus;
   progress: number;
   errorMessage?: string;

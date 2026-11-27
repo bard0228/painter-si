@@ -219,7 +219,7 @@ export function App() {
                 className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] bg-transparent cursor-pointer select-none"
                 data-testid="version-secret-trigger"
               >
-                v1.2
+                v1.3
               </button>
             </div>
             <p className="dj-display text-xs text-[#9A9E9C] tracking-[0.12em]">

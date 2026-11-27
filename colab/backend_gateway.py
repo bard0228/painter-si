@@ -65,6 +65,7 @@ _token_verifier: Callable[[str], dict[str, Any]] = default_token_verifier
 _job_updater: Optional[Callable[[str, dict[str, Any]], None]] = None
 _storyboard_updater: Optional[Callable[[str, dict[str, Any]], None]] = None
 _txt2img_runner = comfy_client.run_comfyui_txt2img
+_edit_runner = comfy_client.run_comfyui_edit
 _i2v_runner = comfy_client.run_comfyui_i2v
 
 
@@ -86,6 +87,11 @@ def set_storyboard_updater(updater: Optional[Callable[[str, dict[str, Any]], Non
 def set_txt2img_runner(runner: Callable[..., dict[str, str]]) -> None:
     global _txt2img_runner
     _txt2img_runner = runner
+
+
+def set_edit_runner(runner: Callable[..., dict[str, str]]) -> None:
+    global _edit_runner
+    _edit_runner = runner
 
 
 def set_i2v_runner(runner: Callable[..., dict[str, str]]) -> None:
@@ -208,11 +214,22 @@ class RenderImageRequest(BaseModel):
     job_id: str
     prompt: str
     style_preset: dict[str, Any]
+    aspect_ratio: str = "1:1"
+    orientation: str = "portrait"
 
 
-def _execute_single_image_job(job_id: str, prompt: str, style_preset: dict[str, Any]) -> None:
+class RenderEditRequest(BaseModel):
+    job_id: str
+    source_drive_path: str
+    prompt: str
+    style_preset: dict[str, Any]
+    denoise: float = 0.45
+    mask_base64: Optional[str] = None
+
+
+def _execute_single_image_job(req: RenderImageRequest) -> None:
     update_render_job_doc(
-        job_id,
+        req.job_id,
         {
             "status": "processing",
             "progress": 20,
@@ -222,13 +239,15 @@ def _execute_single_image_job(job_id: str, prompt: str, style_preset: dict[str, 
     try:
         gpu_info = detect_gpu_vram()
         result = _txt2img_runner(
-            job_id=job_id,
-            prompt_text=prompt,
-            style_preset=style_preset,
+            job_id=req.job_id,
+            prompt_text=req.prompt,
+            style_preset=req.style_preset,
             vram_mode=gpu_info["vram_mode"],
+            aspect_ratio=req.aspect_ratio,
+            orientation=req.orientation,
         )
         update_render_job_doc(
-            job_id,
+            req.job_id,
             {
                 "status": "completed",
                 "progress": 100,
@@ -239,7 +258,7 @@ def _execute_single_image_job(job_id: str, prompt: str, style_preset: dict[str, 
         )
     except Exception as exc:
         update_render_job_doc(
-            job_id,
+            req.job_id,
             {
                 "status": "failed",
                 "progress": 0,
@@ -249,7 +268,49 @@ def _execute_single_image_job(job_id: str, prompt: str, style_preset: dict[str, 
         )
 
 
-app = FastAPI(title="繪師 BackendGateway", version="0.3.0")
+def _execute_edit_image_job(req: RenderEditRequest) -> None:
+    update_render_job_doc(
+        req.job_id,
+        {
+            "status": "processing",
+            "progress": 20,
+            "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+        },
+    )
+    try:
+        gpu_info = detect_gpu_vram()
+        result = _edit_runner(
+            job_id=req.job_id,
+            source_drive_path=req.source_drive_path,
+            prompt_text=req.prompt,
+            style_preset=req.style_preset,
+            denoise=req.denoise,
+            mask_base64=req.mask_base64,
+            vram_mode=gpu_info["vram_mode"],
+        )
+        update_render_job_doc(
+            req.job_id,
+            {
+                "status": "completed",
+                "progress": 100,
+                "outputDrivePath": result["output_drive_path"],
+                "thumbnailWebp": result["thumbnail_webp"],
+                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+            },
+        )
+    except Exception as exc:
+        update_render_job_doc(
+            req.job_id,
+            {
+                "status": "failed",
+                "progress": 0,
+                "errorMessage": str(exc),
+                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+            },
+        )
+
+
+app = FastAPI(title="繪師 BackendGateway", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -290,7 +351,28 @@ def render_single_image(
             "updatedAt": now_iso,
         },
     )
-    background_tasks.add_task(_execute_single_image_job, req.job_id, req.prompt, req.style_preset)
+    background_tasks.add_task(_execute_single_image_job, req)
+    return {"job_id": req.job_id, "status": "queued", "accepted_at_taipei": now_iso}
+
+
+@app.post("/render/edit")
+def render_edit_image(
+    req: RenderEditRequest,
+    background_tasks: BackgroundTasks,
+    _user: dict[str, Any] = Depends(verify_firebase_token),
+) -> dict[str, Any]:
+    now_iso = datetime.now(TAIPEI_TZ).isoformat()
+    update_render_job_doc(
+        req.job_id,
+        {
+            "id": req.job_id,
+            "kind": "single_image",
+            "status": "queued",
+            "progress": 5,
+            "updatedAt": now_iso,
+        },
+    )
+    background_tasks.add_task(_execute_edit_image_job, req)
     return {"job_id": req.job_id, "status": "queued", "accepted_at_taipei": now_iso}
 
 

@@ -62,8 +62,18 @@ export async function submitSingleImageRenderJob(params: {
   user: User | null;
   prompt: string;
   stylePreset: StylePreset;
+  aspectRatio?: string;
+  orientation?: 'portrait' | 'landscape';
 }): Promise<RenderJob> {
-  const { useCloud, gatewayUrl, user, prompt, stylePreset } = params;
+  const {
+    useCloud,
+    gatewayUrl,
+    user,
+    prompt,
+    stylePreset,
+    aspectRatio = '1:1',
+    orientation = 'portrait',
+  } = params;
   const ts = nowTaipeiIso();
   const jobId = `job-img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -72,6 +82,8 @@ export async function submitSingleImageRenderJob(params: {
     kind: 'single_image',
     prompt: prompt.trim(),
     stylePresetId: stylePreset.id,
+    aspectRatio,
+    orientation,
     status: 'queued',
     progress: 5,
     createdAt: ts,
@@ -98,6 +110,81 @@ export async function submitSingleImageRenderJob(params: {
       job_id: jobId,
       prompt: prompt.trim(),
       style_preset: stylePreset,
+      aspect_ratio: aspectRatio,
+      orientation,
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    const failed: RenderJob = {
+      ...job,
+      status: 'failed',
+      progress: 0,
+      errorMessage: `HTTP ${res.status}: ${detail || res.statusText}`,
+      updatedAt: nowTaipeiIso(),
+    };
+    await setDoc(doc(db, 'renderJobs', jobId), failed, { merge: true });
+    throw new Error(failed.errorMessage);
+  }
+
+  return job;
+}
+
+export async function submitImageEditJob(params: {
+  useCloud: boolean;
+  gatewayUrl?: string;
+  user: User | null;
+  sourceJob: RenderJob;
+  prompt: string;
+  stylePreset: StylePreset;
+  denoise: number;
+  maskBase64?: string | null;
+}): Promise<RenderJob> {
+  const { useCloud, gatewayUrl, user, sourceJob, prompt, stylePreset, denoise, maskBase64 } = params;
+  if (!sourceJob.outputDrivePath) {
+    throw new Error('原始圖片尚未完成存檔，無法微調');
+  }
+  const ts = nowTaipeiIso();
+  const jobId = `job-edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+  const job: RenderJob = {
+    id: jobId,
+    kind: 'single_image',
+    sourceJobId: sourceJob.id,
+    prompt: prompt.trim(),
+    stylePresetId: stylePreset.id,
+    aspectRatio: sourceJob.aspectRatio,
+    orientation: sourceJob.orientation,
+    status: 'queued',
+    progress: 5,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+
+  if (!useCloud || !db || !user || !gatewayUrl) {
+    const list = [job, ...readLocalJobs()];
+    writeLocalJobs(list);
+    return job;
+  }
+
+  await setDoc(doc(db, 'renderJobs', jobId), job, { merge: true });
+
+  const idToken = await user.getIdToken(true);
+  const cleanUrl = gatewayUrl.replace(/\/+$/, '');
+  const res = await fetch(`${cleanUrl}/render/edit`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      source_drive_path: sourceJob.outputDrivePath,
+      prompt: prompt.trim(),
+      style_preset: stylePreset,
+      denoise,
+      mask_base64: maskBase64 || null,
     }),
   });
 

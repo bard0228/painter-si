@@ -12,13 +12,20 @@ import type { StylePreset, StylePresetType } from '../types/domain';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
 
+import { ANIME_CHECKPOINT, REALISTIC_CHECKPOINT } from '../data/defaultStylePresets';
+
 interface StylePresetManagerProps {
   user: User | null;
 }
 
+const CHECKPOINT_OPTIONS = [
+  { value: ANIME_CHECKPOINT, label: 'Animagine XL 3.1（動漫 / 光影 / 插畫）' },
+  { value: REALISTIC_CHECKPOINT, label: 'Juggernaut XL v9（電影 / 真實寫實）' },
+];
+
 const SAMPLER_OPTIONS = [
   { value: 'euler', label: 'euler — 乾淨快速' },
-  { value: 'euler_ancestral', label: 'euler_ancestral — 柔和插畫 / Turbo 推薦' },
+  { value: 'euler_ancestral', label: 'euler_ancestral — 柔和插畫 / 動漫推薦' },
   { value: 'dpmpp_2m', label: 'dpmpp_2m — 電影寫實主力' },
   { value: 'dpmpp_2m_sde', label: 'dpmpp_2m_sde — 立體材質細緻' },
   { value: 'uni_pc', label: 'uni_pc — 低步數高效率' },
@@ -30,8 +37,9 @@ const EMPTY_FORM = (type: StylePresetType): StylePresetInput => ({
   positivePromptTemplate: '{prompt}, ',
   negativePromptTemplate: 'lowres, blurry, watermark, deformed',
   sampler: type === 'image' ? 'euler_ancestral' : 'euler',
-  steps: type === 'image' ? 24 : 20,
-  cfgScale: type === 'image' ? 6.0 : 6.0,
+  steps: type === 'image' ? 26 : 20,
+  cfgScale: type === 'image' ? 6.5 : 6.0,
+  checkpointName: type === 'image' ? ANIME_CHECKPOINT : '',
   loraName: '',
 });
 
@@ -85,6 +93,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
       sampler: preset.sampler,
       steps: preset.steps,
       cfgScale: preset.cfgScale,
+      checkpointName: preset.checkpointName || ANIME_CHECKPOINT,
       loraName: preset.loraName || '',
       createdAt: preset.createdAt,
     });
@@ -325,6 +334,17 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
               <div className={`dj-accordion ${showAdvancedParams ? 'is-open' : ''}`}>
                 <div className="dj-accordion-inner">
                   <div className="pt-3 space-y-3">
+                    {form.type === 'image' && (
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] text-[#9A9E9C] block">主力底模 (Checkpoint)</span>
+                        <ArchSelect
+                          value={form.checkpointName || ANIME_CHECKPOINT}
+                          onChange={(val) => setForm((f) => ({ ...f, checkpointName: val }))}
+                          options={CHECKPOINT_OPTIONS}
+                        />
+                      </div>
+                    )}
+
                     <div className="space-y-1.5">
                       <span className="text-[11px] text-[#9A9E9C] block">採樣器 (Sampler)</span>
                       <ArchSelect

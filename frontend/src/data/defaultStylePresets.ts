@@ -1,5 +1,8 @@
 import type { StylePreset } from '../types/domain';
 
+export const ANIME_CHECKPOINT = 'animagine-xl-3.1.safetensors';
+export const REALISTIC_CHECKPOINT = 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors';
+
 export function nowTaipeiIso(): string {
   const now = new Date();
   const taipei = new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -16,8 +19,9 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     negativePromptTemplate:
       'photorealistic, photograph, 3d render, glossy, shiny, black outlines, thick ink lines, harsh contrast, neon colors, oversaturated, text, typography, watermark, signature, messy brushstrokes, anime shading',
     sampler: 'euler_ancestral',
-    steps: 24,
-    cfgScale: 6.0,
+    steps: 26,
+    cfgScale: 6.5,
+    checkpointName: ANIME_CHECKPOINT,
     loraName: '',
   },
   {
@@ -25,12 +29,13 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     name: '光影動漫',
     type: 'image',
     positivePromptTemplate:
-      '{prompt}, ethereal anime illustration, breathtaking dramatic lighting, volumetric god rays, glowing rim light, luminous atmospheric depth, delicate anime character, shimmering particles, masterpiece, high detail',
+      '{prompt}, masterpiece, best quality, very aesthetic, ethereal anime illustration, breathtaking dramatic lighting, volumetric god rays, glowing rim light, luminous atmospheric depth, delicate anime character, shimmering particles',
     negativePromptTemplate:
-      'photorealistic, 3d render, flat lighting, muddy colors, lowres, bad anatomy, extra fingers, blurry, watermark, text',
+      'nsfw, lowres, bad anatomy, bad hands, extra fingers, text, error, missing fingers, worst quality, low quality, photorealistic, 3d render, flat lighting, watermark',
     sampler: 'euler_ancestral',
-    steps: 26,
+    steps: 28,
     cfgScale: 6.5,
+    checkpointName: ANIME_CHECKPOINT,
     loraName: '光影動漫.safetensors',
   },
   {
@@ -38,12 +43,13 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     name: '唯美宇宙',
     type: 'image',
     positivePromptTemplate:
-      '{prompt}, ethereal anime art, vast cosmic night sky, glowing full moon, sparkling starry nebula, infinite tranquil space atmosphere, dreamy celestial light, delicate anime character, cinematic wide composition, masterpiece',
+      '{prompt}, masterpiece, best quality, very aesthetic, ethereal anime art, vast cosmic night sky, glowing full moon, sparkling starry nebula, infinite tranquil space atmosphere, dreamy celestial light, delicate anime character, cinematic wide composition',
     negativePromptTemplate:
-      'photorealistic, 3d render, cluttered background, harsh daytime, lowres, bad anatomy, blurry, watermark, text',
+      'nsfw, lowres, bad anatomy, bad hands, worst quality, low quality, photorealistic, 3d render, cluttered background, harsh daytime, watermark, text',
     sampler: 'euler_ancestral',
-    steps: 26,
+    steps: 28,
     cfgScale: 6.5,
+    checkpointName: ANIME_CHECKPOINT,
     loraName: '唯美宇宙.safetensors',
   },
   {
@@ -57,6 +63,7 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     sampler: 'dpmpp_2m',
     steps: 28,
     cfgScale: 5.5,
+    checkpointName: REALISTIC_CHECKPOINT,
     loraName: '寫實風.safetensors',
   },
   {
@@ -64,12 +71,13 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     name: '遊戲動漫',
     type: 'image',
     positivePromptTemplate:
-      '{prompt}, high-budget JRPG game CG illustration, vibrant anime character art, dynamic polished shading, crisp cel-shaded details, rich fantasy game environment, official game key visual quality, masterpiece',
+      '{prompt}, masterpiece, best quality, very aesthetic, high-budget JRPG game CG illustration, vibrant anime character art, dynamic polished shading, crisp cel-shaded details, rich fantasy game environment, official game key visual quality',
     negativePromptTemplate:
-      'photorealistic, photograph, dull colors, sketch, rough lines, lowres, bad anatomy, blurry, watermark, UI HUD text',
+      'nsfw, lowres, bad anatomy, bad hands, worst quality, low quality, photorealistic, photograph, dull colors, sketch, rough lines, watermark, UI HUD text',
     sampler: 'euler_ancestral',
-    steps: 26,
+    steps: 28,
     cfgScale: 6.5,
+    checkpointName: ANIME_CHECKPOINT,
     loraName: '遊戲動漫.safetensors',
   },
   {
@@ -77,12 +85,13 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     name: '日系繪本水彩',
     type: 'image',
     positivePromptTemplate:
-      '{prompt}, soft watercolor illustration, warm pastel palette, textured cotton paper, gentle sunlight, hand-painted storybook style, delicate ink outlines',
+      '{prompt}, masterpiece, best quality, soft watercolor illustration, warm pastel palette, textured cotton paper, gentle sunlight, hand-painted storybook style, delicate ink outlines',
     negativePromptTemplate:
       'photorealistic, 3d render, harsh contrast, neon colors, blurry, watermark, text, deformed anatomy',
     sampler: 'euler_ancestral',
-    steps: 24,
+    steps: 26,
     cfgScale: 6.5,
+    checkpointName: ANIME_CHECKPOINT,
     loraName: '',
   },
   {
@@ -90,12 +99,13 @@ export const DEFAULT_STYLE_PRESETS: Omit<StylePreset, 'createdAt' | 'updatedAt'>
     name: '電影感底片寫實',
     type: 'image',
     positivePromptTemplate:
-      '{prompt}, 35mm film photography, Kodak Portra 400, shallow depth of field, natural rim lighting, subtle film grain, cinematic composition',
+      '{prompt}, 35mm film photography, Kodak Portra 400, shallow depth of field, natural rim lighting, subtle film grain, cinematic composition, photorealistic',
     negativePromptTemplate:
       'anime, cartoon, cgi, oversaturated, plastic skin, lowres, jpeg artifacts, watermark',
     sampler: 'dpmpp_2m',
     steps: 28,
     cfgScale: 5.5,
+    checkpointName: REALISTIC_CHECKPOINT,
     loraName: '',
   },
   {

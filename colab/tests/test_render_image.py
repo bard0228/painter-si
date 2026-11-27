@@ -1,5 +1,5 @@
 """
-Ticket #3 單張生圖管線與 Range Request 測試
+Ticket #3 + 進階升級測試：單張生圖、比例/直橫、雙神模切換、Img2Img/Inpaint 與 Range Request
 """
 
 import io
@@ -29,42 +29,66 @@ class TestRenderImageAndMedia(unittest.TestCase):
     def tearDown(self) -> None:
         backend_gateway.set_job_updater(None)
         backend_gateway.set_txt2img_runner(comfy_client.run_comfyui_txt2img)
+        backend_gateway.set_edit_runner(comfy_client.run_comfyui_edit)
 
-    def test_vram_workflow_adaptation_and_webp_compression(self) -> None:
+    def test_checkpoint_aspect_ratio_and_webp_compression(self) -> None:
         preset = {
             "positivePromptTemplate": "{prompt}, cinematic",
             "negativePromptTemplate": "blurry",
             "sampler": "dpmpp_2m",
             "steps": 25,
             "cfgScale": 6.0,
+            "checkpointName": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
             "loraName": "film.safetensors",
         }
-        high_wf = comfy_client.build_txt2img_workflow("a quiet alley", preset, vram_mode="high_vram", seed=42)
-        low_wf = comfy_client.build_txt2img_workflow("a quiet alley", preset, vram_mode="low_vram", seed=42)
+        portrait_wf = comfy_client.build_txt2img_workflow(
+            "a quiet alley", preset, aspect_ratio="3:4", orientation="portrait", seed=42
+        )
+        landscape_wf = comfy_client.build_txt2img_workflow(
+            "a quiet alley", preset, aspect_ratio="3:4", orientation="landscape", seed=42
+        )
 
-        self.assertEqual(high_wf["4"]["inputs"]["width"], 1024)
-        self.assertEqual(high_wf["5"]["inputs"]["steps"], 25)
-        self.assertEqual(high_wf["5"]["inputs"]["cfg"], 6.0)
-        self.assertEqual(high_wf["5"]["inputs"]["sampler_name"], "dpmpp_2m")
-
-        self.assertEqual(low_wf["4"]["inputs"]["width"], 768)
-        self.assertLessEqual(low_wf["5"]["inputs"]["steps"], 8)
-        self.assertLessEqual(low_wf["5"]["inputs"]["cfg"], 1.8)
-        self.assertEqual(low_wf["5"]["inputs"]["sampler_name"], "euler_ancestral")
-        self.assertIn("8", high_wf)  # LoraLoader node
+        self.assertEqual(portrait_wf["1"]["inputs"]["ckpt_name"], "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors")
+        self.assertEqual(portrait_wf["4"]["inputs"]["width"], 896)
+        self.assertEqual(portrait_wf["4"]["inputs"]["height"], 1152)
+        self.assertEqual(landscape_wf["4"]["inputs"]["width"], 1152)
+        self.assertEqual(landscape_wf["4"]["inputs"]["height"], 896)
+        self.assertIn("8", portrait_wf)
 
         buf = io.BytesIO()
         Image.new("RGB", (800, 800), (30, 40, 50)).save(buf, format="PNG")
         uri = comfy_client.compress_to_webp_data_uri(buf.getvalue())
         self.assertTrue(uri.startswith("data:image/webp;base64,"))
 
-    def test_render_image_state_transitions(self) -> None:
+    def test_img2img_and_inpaint_workflows(self) -> None:
+        preset = {"positivePromptTemplate": "{prompt}", "checkpointName": "animagine-xl-3.1.safetensors"}
+        img2img_wf = comfy_client.build_edit_workflow(
+            "src.png", "add starry sky", preset, denoise=0.45, uploaded_mask_name=None, seed=7
+        )
+        self.assertEqual(img2img_wf["5"]["inputs"]["denoise"], 0.45)
+        self.assertEqual(img2img_wf["5"]["inputs"]["latent_image"], ["10", 0])
+        self.assertNotIn("11", img2img_wf)
+
+        inpaint_wf = comfy_client.build_edit_workflow(
+            "src.png", "smiling face", preset, denoise=0.65, uploaded_mask_name="mask.png", seed=7
+        )
+        self.assertIn("11", inpaint_wf)
+        self.assertIn("12", inpaint_wf)
+        self.assertEqual(inpaint_wf["5"]["inputs"]["latent_image"], ["12", 0])
+
+    def test_render_image_and_edit_state_transitions(self) -> None:
         events = []
         backend_gateway.set_job_updater(lambda jid, fields: events.append((jid, fields["status"])))
         backend_gateway.set_txt2img_runner(
             lambda **_kw: {
                 "output_drive_path": "images/job-1.png",
                 "thumbnail_webp": "data:image/webp;base64,AAAA",
+            }
+        )
+        backend_gateway.set_edit_runner(
+            lambda **_kw: {
+                "output_drive_path": "images/job-edit-1.png",
+                "thumbnail_webp": "data:image/webp;base64,BBBB",
             }
         )
 
@@ -75,10 +99,35 @@ class TestRenderImageAndMedia(unittest.TestCase):
                 "job_id": "job-1",
                 "prompt": "rainy neon street",
                 "style_preset": {"name": "Cinematic", "positivePromptTemplate": "{prompt}"},
+                "aspect_ratio": "9:16",
+                "orientation": "landscape",
             },
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(events, [("job-1", "queued"), ("job-1", "processing"), ("job-1", "completed")])
+
+        edit_res = self.client.post(
+            "/render/edit",
+            headers={"Authorization": "Bearer valid.token"},
+            json={
+                "job_id": "job-edit-1",
+                "source_drive_path": "images/job-1.png",
+                "prompt": "brighter moonlight",
+                "style_preset": {"name": "Cinematic", "positivePromptTemplate": "{prompt}"},
+                "denoise": 0.4,
+            },
+        )
+        self.assertEqual(edit_res.status_code, 200)
+        self.assertEqual(
+            events,
+            [
+                ("job-1", "queued"),
+                ("job-1", "processing"),
+                ("job-1", "completed"),
+                ("job-edit-1", "queued"),
+                ("job-edit-1", "processing"),
+                ("job-edit-1", "completed"),
+            ],
+        )
 
     def test_media_range_request_206_and_traversal_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

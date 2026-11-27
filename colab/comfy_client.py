@@ -24,8 +24,36 @@ OUTPUT_DIR = Path(
     os.getenv("HUISHI_OUTPUT_DIR", "/content/drive/MyDrive/麻糬紅豆湯/繪師/AI_Studio/outputs")
 )
 
-HIGH_VRAM_CKPT = os.getenv("HUISHI_CKPT_HIGH", "sd_xl_base_1.0.safetensors")
-LOW_VRAM_CKPT = os.getenv("HUISHI_CKPT_LOW", "sd_xl_turbo_1.0_fp16.safetensors")
+ANIME_CKPT = os.getenv("HUISHI_CKPT_ANIME", "animagine-xl-3.1.safetensors")
+REALISTIC_CKPT = os.getenv("HUISHI_CKPT_REALISTIC", "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors")
+HIGH_VRAM_CKPT = os.getenv("HUISHI_CKPT_HIGH", ANIME_CKPT)
+LOW_VRAM_CKPT = os.getenv("HUISHI_CKPT_LOW", ANIME_CKPT)
+
+ASPECT_RATIO_BUCKETS: dict[str, tuple[int, int]] = {
+    "1:1": (1024, 1024),
+    "3:4": (896, 1152),
+    "2:3": (832, 1216),
+    "9:16": (768, 1344),
+}
+
+
+def resolve_dimensions(
+    aspect_ratio: str = "1:1",
+    orientation: str = "portrait",
+) -> tuple[int, int]:
+    """Resolve SDXL-native width and height from aspect ratio and portrait/landscape orientation."""
+    base_w, base_h = ASPECT_RATIO_BUCKETS.get(aspect_ratio, (1024, 1024))
+    if orientation == "landscape" and base_w < base_h:
+        return base_h, base_w
+    return base_w, base_h
+
+
+def resolve_checkpoint_name(style_preset: dict[str, Any], vram_mode: str = "low_vram") -> str:
+    """Resolve checkpoint from StylePreset.checkpointName or fallback to default flagship model."""
+    explicit = str(style_preset.get("checkpointName") or "").strip()
+    if explicit:
+        return explicit
+    return HIGH_VRAM_CKPT if vram_mode == "high_vram" else LOW_VRAM_CKPT
 
 
 def adapt_sampler_params_for_checkpoint(
@@ -36,7 +64,7 @@ def adapt_sampler_params_for_checkpoint(
 ) -> tuple[str, int, float]:
     """
     Auto-adapt sampling parameters so SDXL Turbo never receives high steps/CFG
-    that cause over-fried/oversaturated outputs, while SDXL Base keeps full quality.
+    that cause over-fried/oversaturated outputs, while flagship SDXL models keep full quality.
     """
     if "turbo" in ckpt_name.lower():
         safe_steps = max(4, min(steps, 8)) if steps > 10 else max(1, steps)
@@ -51,22 +79,23 @@ def build_txt2img_workflow(
     style_preset: dict[str, Any],
     vram_mode: str = "low_vram",
     seed: Optional[int] = None,
+    aspect_ratio: str = "1:1",
+    orientation: str = "portrait",
 ) -> dict[str, Any]:
-    """Build ComfyUI API workflow JSON adapted to high_vram (>=24GB) or low_vram (<24GB)."""
+    """Build ComfyUI API workflow JSON with checkpoint selection and aspect ratio/orientation."""
     pos_tpl = style_preset.get("positivePromptTemplate") or "{prompt}"
     positive = pos_tpl.replace("{prompt}", prompt_text) if "{prompt}" in pos_tpl else f"{prompt_text}, {pos_tpl}"
     negative = style_preset.get("negativePromptTemplate") or "lowres, blurry, watermark"
-    raw_sampler = style_preset.get("sampler") or "euler"
-    raw_steps = int(style_preset.get("steps") or 24)
+    raw_sampler = style_preset.get("sampler") or "euler_ancestral"
+    raw_steps = int(style_preset.get("steps") or 26)
     raw_cfg = float(style_preset.get("cfgScale") or 6.5)
     lora_name = (style_preset.get("loraName") or "").strip()
 
-    is_high = vram_mode == "high_vram"
-    ckpt_name = HIGH_VRAM_CKPT if is_high else LOW_VRAM_CKPT
+    ckpt_name = resolve_checkpoint_name(style_preset, vram_mode=vram_mode)
     sampler, steps, cfg = adapt_sampler_params_for_checkpoint(
         ckpt_name, raw_sampler, raw_steps, raw_cfg
     )
-    width, height = (1024, 1024) if is_high else (768, 768)
+    width, height = resolve_dimensions(aspect_ratio=aspect_ratio, orientation=orientation)
     actual_seed = seed if seed is not None else int(time.time() * 1000) % (2**31 - 1)
 
     model_ref: list[Any] = ["1", 0]
@@ -132,6 +161,111 @@ def build_txt2img_workflow(
     return workflow
 
 
+def build_edit_workflow(
+    uploaded_source_name: str,
+    prompt_text: str,
+    style_preset: dict[str, Any],
+    denoise: float = 0.45,
+    uploaded_mask_name: Optional[str] = None,
+    vram_mode: str = "low_vram",
+    seed: Optional[int] = None,
+) -> dict[str, Any]:
+    """Build ComfyUI Img2Img (full refine) or Inpaint (masked regional repaint) workflow."""
+    pos_tpl = style_preset.get("positivePromptTemplate") or "{prompt}"
+    positive = pos_tpl.replace("{prompt}", prompt_text) if "{prompt}" in pos_tpl else f"{prompt_text}, {pos_tpl}"
+    negative = style_preset.get("negativePromptTemplate") or "lowres, blurry, watermark"
+    raw_sampler = style_preset.get("sampler") or "euler_ancestral"
+    raw_steps = int(style_preset.get("steps") or 26)
+    raw_cfg = float(style_preset.get("cfgScale") or 6.5)
+    lora_name = (style_preset.get("loraName") or "").strip()
+
+    ckpt_name = resolve_checkpoint_name(style_preset, vram_mode=vram_mode)
+    sampler, steps, cfg = adapt_sampler_params_for_checkpoint(
+        ckpt_name, raw_sampler, raw_steps, raw_cfg
+    )
+    safe_denoise = max(0.15, min(float(denoise), 1.0))
+    actual_seed = seed if seed is not None else int(time.time() * 1000) % (2**31 - 1)
+
+    model_ref: list[Any] = ["1", 0]
+    clip_ref: list[Any] = ["1", 1]
+
+    workflow: dict[str, Any] = {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": ckpt_name},
+        },
+        "9": {
+            "class_type": "LoadImage",
+            "inputs": {"image": uploaded_source_name},
+        },
+        "10": {
+            "class_type": "VAEEncode",
+            "inputs": {"pixels": ["9", 0], "vae": ["1", 2]},
+        },
+        "6": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["5", 0], "vae": ["1", 2]},
+        },
+        "7": {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "huishi_edit", "images": ["6", 0]},
+        },
+    }
+
+    latent_ref: list[Any] = ["10", 0]
+    if uploaded_mask_name:
+        workflow["11"] = {
+            "class_type": "LoadImageMask",
+            "inputs": {"image": uploaded_mask_name, "channel": "red"},
+        }
+        workflow["12"] = {
+            "class_type": "SetLatentNoiseMask",
+            "inputs": {"samples": ["10", 0], "mask": ["11", 0]},
+        }
+        latent_ref = ["12", 0]
+
+    workflow["5"] = {
+        "class_type": "KSampler",
+        "inputs": {
+            "seed": actual_seed,
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": sampler,
+            "scheduler": "normal",
+            "denoise": safe_denoise,
+            "model": model_ref,
+            "positive": ["2", 0],
+            "negative": ["3", 0],
+            "latent_image": latent_ref,
+        },
+    }
+
+    if lora_name:
+        workflow["8"] = {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "lora_name": lora_name,
+                "strength_model": 0.85,
+                "strength_clip": 0.85,
+                "model": ["1", 0],
+                "clip": ["1", 1],
+            },
+        }
+        workflow["5"]["inputs"]["model"] = ["8", 0]
+        clip_ref = ["8", 1]
+
+    workflow["2"] = {
+        "class_type": "CLIPTextEncode",
+        "inputs": {"text": positive, "clip": clip_ref},
+    }
+    workflow["3"] = {
+        "class_type": "CLIPTextEncode",
+        "inputs": {"text": negative, "clip": clip_ref},
+    }
+
+    return workflow
+
+
 def free_comfyui_vram(comfy_url: str = COMFYUI_URL) -> None:
     """ADR-03: Call ComfyUI /free endpoint to unload models and prevent OOM."""
     req = urllib.request.Request(
@@ -154,18 +288,12 @@ def compress_to_webp_data_uri(image_bytes: bytes, max_size: int = 512, quality: 
     return f"data:image/webp;base64,{b64}"
 
 
-def run_comfyui_txt2img(
+def _submit_and_fetch_image(
     job_id: str,
-    prompt_text: str,
-    style_preset: dict[str, Any],
-    vram_mode: str = "low_vram",
-    comfy_url: str = COMFYUI_URL,
-    output_dir: Path = OUTPUT_DIR,
+    workflow: dict[str, Any],
+    comfy_url: str,
+    output_dir: Path,
 ) -> dict[str, str]:
-    """Execute txt2img via ComfyUI API, save PNG to Drive, and return relative path + WebP thumbnail."""
-    free_comfyui_vram(comfy_url)
-    workflow = build_txt2img_workflow(prompt_text, style_preset, vram_mode=vram_mode)
-
     payload = json.dumps({"prompt": workflow, "client_id": f"huishi-{job_id}"}).encode("utf-8")
     req = urllib.request.Request(
         f"{comfy_url}/prompt",
@@ -176,7 +304,6 @@ def run_comfyui_txt2img(
     with urllib.request.urlopen(req, timeout=30) as resp:
         prompt_id = json.loads(resp.read().decode("utf-8"))["prompt_id"]
 
-    # Poll /history/{prompt_id}
     image_meta = None
     for _ in range(180):
         with urllib.request.urlopen(f"{comfy_url}/history/{prompt_id}", timeout=15) as hresp:
@@ -213,6 +340,68 @@ def run_comfyui_txt2img(
         "output_drive_path": rel_path,
         "thumbnail_webp": thumb_webp,
     }
+
+
+def run_comfyui_txt2img(
+    job_id: str,
+    prompt_text: str,
+    style_preset: dict[str, Any],
+    vram_mode: str = "low_vram",
+    aspect_ratio: str = "1:1",
+    orientation: str = "portrait",
+    comfy_url: str = COMFYUI_URL,
+    output_dir: Path = OUTPUT_DIR,
+) -> dict[str, str]:
+    """Execute txt2img via ComfyUI API, save PNG to Drive, and return relative path + WebP thumbnail."""
+    free_comfyui_vram(comfy_url)
+    workflow = build_txt2img_workflow(
+        prompt_text,
+        style_preset,
+        vram_mode=vram_mode,
+        aspect_ratio=aspect_ratio,
+        orientation=orientation,
+    )
+    return _submit_and_fetch_image(job_id, workflow, comfy_url=comfy_url, output_dir=output_dir)
+
+
+def run_comfyui_edit(
+    job_id: str,
+    source_drive_path: str,
+    prompt_text: str,
+    style_preset: dict[str, Any],
+    denoise: float = 0.45,
+    mask_base64: Optional[str] = None,
+    vram_mode: str = "low_vram",
+    comfy_url: str = COMFYUI_URL,
+    output_dir: Path = OUTPUT_DIR,
+) -> dict[str, str]:
+    """Execute Img2Img refine or masked Inpainting via ComfyUI API."""
+    free_comfyui_vram(comfy_url)
+    src_path = (output_dir / source_drive_path).resolve()
+    if not str(src_path).startswith(str(output_dir.resolve())) or not src_path.is_file():
+        raise FileNotFoundError(f"Source image not found: {source_drive_path}")
+
+    uploaded_src = upload_image_to_comfyui(src_path, comfy_url=comfy_url)
+    uploaded_mask: Optional[str] = None
+
+    if mask_base64:
+        b64_payload = mask_base64.split(",", 1)[1] if "," in mask_base64 else mask_base64
+        mask_bytes = base64.b64decode(b64_payload)
+        mask_dir = output_dir / "masks"
+        mask_dir.mkdir(parents=True, exist_ok=True)
+        mask_file = mask_dir / f"{job_id}_mask.png"
+        mask_file.write_bytes(mask_bytes)
+        uploaded_mask = upload_image_to_comfyui(mask_file, comfy_url=comfy_url)
+
+    workflow = build_edit_workflow(
+        uploaded_source_name=uploaded_src,
+        prompt_text=prompt_text,
+        style_preset=style_preset,
+        denoise=denoise,
+        uploaded_mask_name=uploaded_mask,
+        vram_mode=vram_mode,
+    )
+    return _submit_and_fetch_image(job_id, workflow, comfy_url=comfy_url, output_dir=output_dir)
 
 
 HIGH_VRAM_I2V_MODEL = os.getenv("HUISHI_I2V_HIGH", "wan2.1_i2v_720p_14B_fp16.safetensors")
