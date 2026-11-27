@@ -47,7 +47,7 @@ export const WovenDrawer: React.FC<WovenDrawerProps> = ({
               繪師
             </p>
             <p className="dj-display text-[11px] text-[#9A9E9C] tracking-[0.12em]">
-              HUISHI STUDIO
+              PAINTER SI STUDIO
             </p>
           </div>
           <button

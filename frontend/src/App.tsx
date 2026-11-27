@@ -36,7 +36,7 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'01' | '02' | '03' | '04' | '05' | '06'>('06');
+  const [activeSection, setActiveSection] = useState<'01' | '02' | '03' | '04' | '05' | '06'>('01');
   const [revealed, setRevealed] = useState(false);
   const [titleAnimKey, setTitleAnimKey] = useState(0);
   const tapCountRef = React.useRef(0);
@@ -223,7 +223,7 @@ export function App() {
               </button>
             </div>
             <p className="dj-display text-xs text-[#9A9E9C] tracking-[0.12em]">
-              <MaskedTitle key={`en-${titleAnimKey}`} text="HUISHI AI STUDIO" revealed={revealed} />
+              <MaskedTitle key={`en-${titleAnimKey}`} text="PAINTER SI STUDIO" revealed={revealed} />
             </p>
           </div>
 
