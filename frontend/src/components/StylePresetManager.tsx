@@ -183,6 +183,156 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
     }
   };
 
+  const renderPresetForm = () => (
+    <form onSubmit={handleSave} className="dj-surface-card p-4 space-y-3.5 mb-1">
+      <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+        <span className="text-xs tracking-widest text-[#9A9E9C]">
+          {editingId ? 'EDIT / 編輯風格' : 'NEW / 建立風格'}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setIsFormOpen(false);
+            setEditingId(null);
+          }}
+          className="min-h-[48px] min-w-[48px] text-xs tracking-widest text-[#9A9E9C] hover:text-[#F4F4F0]"
+        >
+          取消
+        </button>
+      </div>
+
+      <label className="block space-y-1.5">
+        <span className="text-xs text-[#9A9E9C]">風格名稱</span>
+        <input
+          type="text"
+          required={isFormOpen}
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          placeholder="例如：暗黑建築電影感"
+          className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-sm text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
+        />
+      </label>
+
+      <label className="block space-y-1.5">
+        <span className="text-xs text-[#9A9E9C]">正向提示詞模板 (Positive)</span>
+        <textarea
+          rows={3}
+          value={form.positivePromptTemplate}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, positivePromptTemplate: e.target.value }))
+          }
+          placeholder="{prompt}, cinematic lighting..."
+          className="w-full p-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] leading-relaxed focus:outline-none focus:border-white/40"
+        />
+      </label>
+
+      <label className="block space-y-1.5">
+        <span className="text-xs text-[#9A9E9C]">負向提示詞模板 (Negative)</span>
+        <textarea
+          rows={2}
+          value={form.negativePromptTemplate}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, negativePromptTemplate: e.target.value }))
+          }
+          className="w-full p-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] leading-relaxed focus:outline-none focus:border-white/40"
+        />
+      </label>
+
+      <div className="border-t border-white/10 pt-2">
+        <button
+          type="button"
+          onClick={() => setShowAdvancedParams((v) => !v)}
+          className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 hover:border-white/30 text-xs text-[#9A9E9C] flex items-center justify-between active:scale-[0.98] transition-all"
+          data-testid="toggle-advanced-params-btn"
+        >
+          <span>進階參數（自動安全配對）</span>
+          <span
+            className={`dj-tnum text-[10px] transition-transform duration-300 ${
+              showAdvancedParams ? 'rotate-180' : ''
+            }`}
+          >
+            ▼
+          </span>
+        </button>
+
+        <div className={`dj-accordion ${showAdvancedParams ? 'is-open' : ''}`}>
+          <div className="dj-accordion-inner">
+            <div className="pt-3 space-y-3">
+              {form.type === 'image' && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] text-[#9A9E9C] block">主力底模 (Checkpoint)</span>
+                  <ArchSelect
+                    value={form.checkpointName || ANIME_CHECKPOINT}
+                    onChange={(val) => setForm((f) => ({ ...f, checkpointName: val }))}
+                    options={CHECKPOINT_OPTIONS}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-[#9A9E9C] block">採樣器 (Sampler)</span>
+                <ArchSelect
+                  value={form.sampler}
+                  onChange={(val) => setForm((f) => ({ ...f, sampler: val }))}
+                  options={SAMPLER_OPTIONS}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="block space-y-1.5">
+                  <span className="text-[11px] text-[#9A9E9C]">Steps（Turbo 自動限縮）</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.steps}
+                    onChange={(e) => setForm((f) => ({ ...f, steps: Number(e.target.value) }))}
+                    className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
+                  />
+                </label>
+
+                <label className="block space-y-1.5">
+                  <span className="text-[11px] text-[#9A9E9C]">CFG（Turbo 自動限縮）</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min={1}
+                    max={20}
+                    value={form.cfgScale}
+                    onChange={(e) => setForm((f) => ({ ...f, cfgScale: Number(e.target.value) }))}
+                    className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-1.5">
+                <span className="text-xs text-[#9A9E9C]">
+                  單一 LoRA 權重檔名（選填，置於 Drive models/loras/）
+                </span>
+                <input
+                  type="text"
+                  value={form.loraName || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, loraName: e.target.value }))}
+                  placeholder="留空不使用；範例：watercolor_v1.safetensors"
+                  className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="dj-btn dj-btn-primary w-full"
+        data-testid="save-preset-btn"
+      >
+        {saving ? '儲存中...' : editingId ? '儲存變更' : '建立風格'}
+      </button>
+    </form>
+  );
+
   return (
     <section className="dj-tab-enter space-y-5">
       <ConfirmDialog
@@ -216,6 +366,7 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
               onClick={() => {
                 setActiveType(t);
                 setIsFormOpen(false);
+                setEditingId(null);
                 setStatusMsg(null);
               }}
               className={`min-h-[48px] border text-xs font-medium tracking-[0.12em] transition-all active:scale-[0.96] ${
@@ -264,158 +415,12 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
         </div>
       )}
 
-      {/* 新增 / 編輯表單卡片（手風琴動畫展開收起） */}
-      <div className={`dj-accordion ${isFormOpen ? 'is-open' : ''}`}>
-        <div className="dj-accordion-inner">
-          <form onSubmit={handleSave} className="dj-surface-card p-4 space-y-3.5 mb-1">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <span className="text-xs tracking-widest text-[#9A9E9C]">
-                {editingId ? 'EDIT / 編輯風格' : 'NEW / 建立風格'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsFormOpen(false)}
-                className="min-h-[48px] min-w-[48px] text-xs tracking-widest text-[#9A9E9C] hover:text-[#F4F4F0]"
-              >
-                取消
-              </button>
-            </div>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs text-[#9A9E9C]">風格名稱</span>
-              <input
-                type="text"
-                required={isFormOpen}
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="例如：暗黑建築電影感"
-                className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-sm text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
-              />
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs text-[#9A9E9C]">正向提示詞模板 (Positive)</span>
-              <textarea
-                rows={3}
-                value={form.positivePromptTemplate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, positivePromptTemplate: e.target.value }))
-                }
-                placeholder="{prompt}, cinematic lighting..."
-                className="w-full p-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] leading-relaxed focus:outline-none focus:border-white/40"
-              />
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs text-[#9A9E9C]">負向提示詞模板 (Negative)</span>
-              <textarea
-                rows={2}
-                value={form.negativePromptTemplate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, negativePromptTemplate: e.target.value }))
-                }
-                className="w-full p-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] leading-relaxed focus:outline-none focus:border-white/40"
-              />
-            </label>
-
-            {/* 預設折疊的進階參數手風琴（依 GPU 模型自動安全配對） */}
-            <div className="border-t border-white/10 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvancedParams((v) => !v)}
-                className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 hover:border-white/30 text-xs text-[#9A9E9C] flex items-center justify-between active:scale-[0.98] transition-all"
-                data-testid="toggle-advanced-params-btn"
-              >
-                <span>進階參數（自動安全配對）</span>
-                <span
-                  className={`dj-tnum text-[10px] transition-transform duration-300 ${
-                    showAdvancedParams ? 'rotate-180' : ''
-                  }`}
-                >
-                  ▼
-                </span>
-              </button>
-
-              <div className={`dj-accordion ${showAdvancedParams ? 'is-open' : ''}`}>
-                <div className="dj-accordion-inner">
-                  <div className="pt-3 space-y-3">
-                    {form.type === 'image' && (
-                      <div className="space-y-1.5">
-                        <span className="text-[11px] text-[#9A9E9C] block">主力底模 (Checkpoint)</span>
-                        <ArchSelect
-                          value={form.checkpointName || ANIME_CHECKPOINT}
-                          onChange={(val) => setForm((f) => ({ ...f, checkpointName: val }))}
-                          options={CHECKPOINT_OPTIONS}
-                        />
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] text-[#9A9E9C] block">採樣器 (Sampler)</span>
-                      <ArchSelect
-                        value={form.sampler}
-                        onChange={(val) => setForm((f) => ({ ...f, sampler: val }))}
-                        options={SAMPLER_OPTIONS}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <label className="block space-y-1.5">
-                        <span className="text-[11px] text-[#9A9E9C]">Steps（Turbo 自動限縮）</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={form.steps}
-                          onChange={(e) => setForm((f) => ({ ...f, steps: Number(e.target.value) }))}
-                          className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
-                        />
-                      </label>
-
-                      <label className="block space-y-1.5">
-                        <span className="text-[11px] text-[#9A9E9C]">CFG（Turbo 自動限縮）</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min={1}
-                          max={20}
-                          value={form.cfgScale}
-                          onChange={(e) => setForm((f) => ({ ...f, cfgScale: Number(e.target.value) }))}
-                          className="dj-tnum w-full min-h-[48px] px-2.5 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] focus:outline-none focus:border-white/40"
-                        />
-                      </label>
-                    </div>
-
-                    <label className="block space-y-1.5">
-                      <span className="text-xs text-[#9A9E9C]">
-                        單一 LoRA 權重檔名（選填，置於 Drive models/loras/）
-                      </span>
-                      <input
-                        type="text"
-                        value={form.loraName || ''}
-                        onChange={(e) => setForm((f) => ({ ...f, loraName: e.target.value }))}
-                        placeholder="留空不使用；範例：watercolor_v1.safetensors"
-                        className="w-full min-h-[48px] px-3 bg-[#0E0F12] border border-white/14 text-xs text-[#F4F4F0] placeholder:text-[#6E7371] focus:outline-none focus:border-white/40"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="dj-btn dj-btn-primary w-full"
-              data-testid="save-preset-btn"
-            >
-              {saving ? '儲存中...' : editingId ? '儲存變更' : '建立風格'}
-            </button>
-          </form>
-        </div>
+      {/* 僅「新增風格」在頂部展開 */}
+      <div className={`dj-accordion ${isFormOpen && !editingId ? 'is-open' : ''}`}>
+        <div className="dj-accordion-inner">{isFormOpen && !editingId && renderPresetForm()}</div>
       </div>
 
-      {/* StylePreset 列表（切換圖片/影片時套用方向性滑入動畫） */}
+      {/* StylePreset 列表（編輯時在該卡片原地展開） */}
       <div
         key={activeType}
         className={`space-y-3 ${activeType === 'image' ? 'dj-slide-left' : 'dj-tab-enter'}`}
@@ -428,56 +433,65 @@ export const StylePresetManager: React.FC<StylePresetManagerProps> = ({ user }) 
             <p className="text-xs text-[#6E7371]">可點擊上方「匯入範本」或自行建立</p>
           </div>
         ) : (
-          filteredPresets.map((preset, idx) => (
-            <div key={preset.id} className="dj-surface-card p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="dj-tnum text-[11px] text-[#6E7371]">
-                      {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <h3 className="dj-serif text-sm font-semibold text-[#F4F4F0] truncate">
-                      {preset.name}
-                    </h3>
+          filteredPresets.map((preset, idx) => {
+            const isEditingThis = isFormOpen && editingId === preset.id;
+            return (
+              <div key={preset.id} className="space-y-2">
+                {isEditingThis ? (
+                  <div className="dj-panel-reveal">{renderPresetForm()}</div>
+                ) : (
+                  <div className="dj-surface-card p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="dj-tnum text-[11px] text-[#6E7371]">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <h3 className="dj-serif text-sm font-semibold text-[#F4F4F0] truncate">
+                            {preset.name}
+                          </h3>
+                        </div>
+                        <p className="dj-tnum text-[11px] text-[#9A9E9C] mt-1">
+                          {preset.sampler} / {preset.steps} steps / CFG {preset.cfgScale}
+                        </p>
+                      </div>
+                      <span className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] shrink-0">
+                        {preset.type === 'image' ? 'IMG' : 'VID'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-[#9A9E9C] line-clamp-2 leading-relaxed bg-[#0E0F12] p-2.5 border border-white/10">
+                      {preset.positivePromptTemplate}
+                    </p>
+
+                    {preset.loraName && (
+                      <p className="text-[11px] text-[#4C7C62] truncate">
+                        LoRA / {preset.loraName}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(preset)}
+                        className="min-h-[48px] min-w-[68px] px-3 border border-white/14 text-xs tracking-widest text-[#F4F4F0] hover:border-white/35 active:scale-[0.96] transition-all"
+                      >
+                        編輯
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(preset)}
+                        className="min-h-[48px] min-w-[68px] px-3 border border-[#B86B4B]/50 text-xs tracking-widest text-[#B86B4B] hover:border-[#B86B4B] active:scale-[0.96] transition-all"
+                        data-testid={`delete-preset-${preset.id}`}
+                      >
+                        刪除
+                      </button>
+                    </div>
                   </div>
-                  <p className="dj-tnum text-[11px] text-[#9A9E9C] mt-1">
-                    {preset.sampler} / {preset.steps} steps / CFG {preset.cfgScale}
-                  </p>
-                </div>
-                <span className="dj-tnum text-[10px] tracking-widest px-2 py-0.5 border border-white/14 text-[#9A9E9C] shrink-0">
-                  {preset.type === 'image' ? 'IMG' : 'VID'}
-                </span>
+                )}
               </div>
-
-              <p className="text-xs text-[#9A9E9C] line-clamp-2 leading-relaxed bg-[#0E0F12] p-2.5 border border-white/10">
-                {preset.positivePromptTemplate}
-              </p>
-
-              {preset.loraName && (
-                <p className="text-[11px] text-[#4C7C62] truncate">
-                  LoRA / {preset.loraName}
-                </p>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => openEdit(preset)}
-                  className="min-h-[48px] min-w-[68px] px-3 border border-white/14 text-xs tracking-widest text-[#F4F4F0] hover:border-white/35 active:scale-[0.96] transition-all"
-                >
-                  編輯
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingDelete(preset)}
-                  className="min-h-[48px] min-w-[68px] px-3 border border-[#B86B4B]/50 text-xs tracking-widest text-[#B86B4B] hover:border-[#B86B4B] active:scale-[0.96] transition-all"
-                  data-testid={`delete-preset-${preset.id}`}
-                >
-                  刪除
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </section>
