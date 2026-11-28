@@ -217,6 +217,9 @@ class RenderImageRequest(BaseModel):
     style_preset: dict[str, Any]
     aspect_ratio: str = "1:1"
     orientation: str = "portrait"
+    reference_images: list[str] = []
+    reference_mode: str = "face"
+    reference_weight: float = 0.75
 
 
 class RenderEditRequest(BaseModel):
@@ -243,14 +246,19 @@ def _execute_single_image_job(req: RenderImageRequest) -> None:
         )
         try:
             gpu_info = detect_gpu_vram()
-            result = _txt2img_runner(
-                job_id=req.job_id,
-                prompt_text=req.prompt,
-                style_preset=req.style_preset,
-                vram_mode=gpu_info["vram_mode"],
-                aspect_ratio=req.aspect_ratio,
-                orientation=req.orientation,
-            )
+            runner_kwargs: dict[str, Any] = {
+                "job_id": req.job_id,
+                "prompt_text": req.prompt,
+                "style_preset": req.style_preset,
+                "vram_mode": gpu_info["vram_mode"],
+                "aspect_ratio": req.aspect_ratio,
+                "orientation": req.orientation,
+            }
+            if req.reference_images:
+                runner_kwargs["reference_images"] = req.reference_images[:4]
+                runner_kwargs["reference_mode"] = req.reference_mode
+                runner_kwargs["reference_weight"] = req.reference_weight
+            result = _txt2img_runner(**runner_kwargs)
             update_render_job_doc(
                 req.job_id,
                 {
@@ -388,118 +396,127 @@ class RenderStoryboardRequest(BaseModel):
     storyboard: dict[str, Any]
     style_presets_map: dict[str, dict[str, Any]] = {}
     reroll_shot_id: Optional[str] = None
+    reference_images: list[str] = []
+    reference_mode: str = "face"
+    reference_weight: float = 0.75
 
 
 def _execute_storyboard_batch_job(req: RenderStoryboardRequest) -> None:
-    shots: list[dict[str, Any]] = list(req.storyboard.get("shots") or [])
-    total = max(1, len(shots))
-    global_style_id = req.storyboard.get("globalStylePresetId")
+    with _gpu_render_lock:
+        shots: list[dict[str, Any]] = list(req.storyboard.get("shots") or [])
+        total = max(1, len(shots))
+        global_style_id = req.storyboard.get("globalStylePresetId")
 
-    update_render_job_doc(
-        req.job_id,
-        {
-            "status": "processing",
-            "progress": 5,
-            "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-        },
-    )
+        update_render_job_doc(
+            req.job_id,
+            {
+                "status": "processing",
+                "progress": 5,
+                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+            },
+        )
 
-    try:
-        gpu_info = detect_gpu_vram()
-        vram_mode = gpu_info["vram_mode"]
+        try:
+            gpu_info = detect_gpu_vram()
+            vram_mode = gpu_info["vram_mode"]
 
-        for idx, shot in enumerate(shots):
-            shot_id = shot.get("id", f"shot-{idx + 1}")
-            is_reroll_target = req.reroll_shot_id == shot_id
+            for idx, shot in enumerate(shots):
+                shot_id = shot.get("id", f"shot-{idx + 1}")
+                is_reroll_target = req.reroll_shot_id == shot_id
 
-            if req.reroll_shot_id and not is_reroll_target:
-                continue
+                if req.reroll_shot_id and not is_reroll_target:
+                    continue
 
-            # Testing Seam (斷點續傳): 跳過已完成之 Shot
-            if (
-                not req.reroll_shot_id
-                and shot.get("status") == "completed"
-                and shot.get("keyframeImagePath")
-                and shot.get("videoPath")
-            ):
-                continue
+                # Testing Seam (斷點續傳): 跳過已完成之 Shot
+                if (
+                    not req.reroll_shot_id
+                    and shot.get("status") == "completed"
+                    and shot.get("keyframeImagePath")
+                    and shot.get("videoPath")
+                ):
+                    continue
 
-            shot["status"] = "processing"
-            update_storyboard_doc(
-                req.storyboard_id,
-                {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
-            )
+                shot["status"] = "processing"
+                update_storyboard_doc(
+                    req.storyboard_id,
+                    {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
+                )
 
-            img_style_id = shot.get("imageStylePresetId") or global_style_id
-            img_preset = req.style_presets_map.get(img_style_id or "", {})
-            vid_style_id = shot.get("videoStylePresetId")
-            vid_preset = req.style_presets_map.get(vid_style_id or "", {})
+                img_style_id = shot.get("imageStylePresetId") or global_style_id
+                img_preset = req.style_presets_map.get(img_style_id or "", {})
+                vid_style_id = shot.get("videoStylePresetId")
+                vid_preset = req.style_presets_map.get(vid_style_id or "", {})
 
-            prompt_text = shot.get("visualDescription") or "cinematic scene"
+                prompt_text = shot.get("visualDescription") or "cinematic scene"
 
-            # 1. Keyframe txt2img
-            img_res = _txt2img_runner(
-                job_id=f"{req.job_id}_{shot_id}",
-                prompt_text=prompt_text,
-                style_preset=img_preset,
-                vram_mode=vram_mode,
-            )
-            shot["keyframeImagePath"] = img_res["output_drive_path"]
-            shot["keyframeThumbnailBase64"] = img_res["thumbnail_webp"]
-            update_storyboard_doc(
-                req.storyboard_id,
-                {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
-            )
+                # 1. Keyframe txt2img (with optional multi-image reference lock)
+                txt2img_kwargs: dict[str, Any] = {
+                    "job_id": f"{req.job_id}_{shot_id}",
+                    "prompt_text": prompt_text,
+                    "style_preset": img_preset,
+                    "vram_mode": vram_mode,
+                }
+                if req.reference_images:
+                    txt2img_kwargs["reference_images"] = req.reference_images[:4]
+                    txt2img_kwargs["reference_mode"] = req.reference_mode
+                    txt2img_kwargs["reference_weight"] = req.reference_weight
+                img_res = _txt2img_runner(**txt2img_kwargs)
+                shot["keyframeImagePath"] = img_res["output_drive_path"]
+                shot["keyframeThumbnailBase64"] = img_res["thumbnail_webp"]
+                update_storyboard_doc(
+                    req.storyboard_id,
+                    {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
+                )
 
-            # 2. Image-to-Video I2V (內部強制呼叫 /free 釋放顯存)
-            vid_res = _i2v_runner(
-                job_id=req.job_id,
-                shot_id=shot_id,
-                keyframe_drive_path=img_res["output_drive_path"],
-                prompt_text=prompt_text,
-                video_style_preset=vid_preset,
-                vram_mode=vram_mode,
-            )
-            shot["videoPath"] = vid_res["video_path"]
-            shot["status"] = "completed"
-            update_storyboard_doc(
-                req.storyboard_id,
-                {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
-            )
+                # 2. Image-to-Video I2V (內部強制呼叫 /free 釋放顯存)
+                vid_res = _i2v_runner(
+                    job_id=req.job_id,
+                    shot_id=shot_id,
+                    keyframe_drive_path=img_res["output_drive_path"],
+                    prompt_text=prompt_text,
+                    video_style_preset=vid_preset,
+                    vram_mode=vram_mode,
+                )
+                shot["videoPath"] = vid_res["video_path"]
+                shot["status"] = "completed"
+                update_storyboard_doc(
+                    req.storyboard_id,
+                    {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
+                )
 
-            completed_cnt = sum(1 for s in shots if s.get("status") == "completed")
+                completed_cnt = sum(1 for s in shots if s.get("status") == "completed")
+                update_render_job_doc(
+                    req.job_id,
+                    {
+                        "progress": int((completed_cnt / total) * 100),
+                        "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                    },
+                )
+
             update_render_job_doc(
                 req.job_id,
                 {
-                    "progress": int((completed_cnt / total) * 100),
+                    "status": "completed",
+                    "progress": 100,
                     "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
                 },
             )
-
-        update_render_job_doc(
-            req.job_id,
-            {
-                "status": "completed",
-                "progress": 100,
-                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-            },
-        )
-    except Exception as exc:
-        for s in shots:
-            if s.get("status") == "processing":
-                s["status"] = "failed"
-        update_storyboard_doc(
-            req.storyboard_id,
-            {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
-        )
-        update_render_job_doc(
-            req.job_id,
-            {
-                "status": "failed",
-                "errorMessage": str(exc),
-                "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
-            },
-        )
+        except Exception as exc:
+            for s in shots:
+                if s.get("status") == "processing":
+                    s["status"] = "failed"
+            update_storyboard_doc(
+                req.storyboard_id,
+                {"shots": shots, "updatedAt": datetime.now(TAIPEI_TZ).isoformat()},
+            )
+            update_render_job_doc(
+                req.job_id,
+                {
+                    "status": "failed",
+                    "errorMessage": str(exc),
+                    "updatedAt": datetime.now(TAIPEI_TZ).isoformat(),
+                },
+            )
 
 
 @app.post("/render/storyboard")

@@ -19,6 +19,7 @@ import { translatePromptToEnglish } from '../services/promptTranslator';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ImageEditModal } from './ImageEditModal';
+import { ReferenceImagesPicker, type ReferenceMode } from './ReferenceImagesPicker';
 
 interface SingleImageStudioProps {
   user: User | null;
@@ -43,6 +44,9 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<string>('1:1');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [refImages, setRefImages] = useState<string[]>([]);
+  const [refMode, setRefMode] = useState<ReferenceMode>('face');
+  const [refWeight, setRefWeight] = useState<number>(0.75);
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<RenderJob | null>(null);
@@ -136,6 +140,9 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
         stylePreset: effectivePreset,
         aspectRatio,
         orientation,
+        referenceImages: refImages,
+        referenceMode: refMode,
+        referenceWeight: refWeight,
       });
       if (!useCloud) {
         setJobs((prev) => [created, ...prev]);
@@ -328,6 +335,15 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
           </div>
         </div>
 
+        <ReferenceImagesPicker
+          images={refImages}
+          mode={refMode}
+          weight={refWeight}
+          onChangeImages={setRefImages}
+          onChangeMode={setRefMode}
+          onChangeWeight={setRefWeight}
+        />
+
         {statusMsg && (
           <div className="dj-panel-reveal p-3 border border-[#4C7C62] bg-[#4C7C62]/10 text-xs text-[#4C7C62] break-words">
             {statusMsg}
@@ -402,6 +418,11 @@ export const SingleImageStudio: React.FC<SingleImageStudioProps> = ({
                         </span>
                       );
                     })()}
+                    {job.referenceCount && job.referenceCount > 0 ? (
+                      <span className="dj-tnum text-[10px] px-1.5 py-0.5 border border-white/25 text-[#F4F4F0]/90">
+                        {job.referenceMode === 'subject' ? '鎖主體' : '鎖人臉'} ×{job.referenceCount}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

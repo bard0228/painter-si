@@ -150,6 +150,62 @@ class TestRenderImageAndMedia(unittest.TestCase):
             )
             self.assertEqual(traversal.status_code, 404)
 
+    def test_multi_reference_workflows_sdxl_and_flux(self):
+        # 1. SDXL FaceID with 3 reference images -> ImageBatch + IPAdapterFaceID
+        wf_sdxl_face = comfy_client.build_txt2img_workflow(
+            "wearing a black suit in Tokyo cafe",
+            {"checkpointName": "RealVisXL_V5.0_fp16.safetensors", "steps": 28, "cfgScale": 5.5},
+            uploaded_ref_names=["ref0.png", "ref1.png", "ref2.png"],
+            reference_mode="face",
+            reference_weight=0.8,
+        )
+        self.assertEqual(wf_sdxl_face["20"]["class_type"], "LoadImage")
+        self.assertEqual(wf_sdxl_face["21"]["class_type"], "LoadImage")
+        self.assertEqual(wf_sdxl_face["22"]["class_type"], "LoadImage")
+        self.assertEqual(wf_sdxl_face["24"]["class_type"], "ImageBatch")
+        self.assertEqual(wf_sdxl_face["25"]["class_type"], "ImageBatch")
+        self.assertEqual(wf_sdxl_face["30"]["class_type"], "IPAdapterUnifiedLoaderFaceID")
+        self.assertEqual(wf_sdxl_face["31"]["class_type"], "IPAdapterFaceID")
+        self.assertEqual(wf_sdxl_face["5"]["inputs"]["model"], ["31", 0])
+
+        # 2. SDXL Subject with 2 reference images -> IPAdapter Plus
+        wf_sdxl_sub = comfy_client.build_txt2img_workflow(
+            "placed on wooden table in sunlight",
+            {"checkpointName": "animagine-xl-3.1.safetensors"},
+            uploaded_ref_names=["obj0.png", "obj1.png"],
+            reference_mode="subject",
+            reference_weight=0.75,
+        )
+        self.assertEqual(wf_sdxl_sub["30"]["class_type"], "IPAdapterUnifiedLoader")
+        self.assertEqual(wf_sdxl_sub["31"]["class_type"], "IPAdapter")
+        self.assertEqual(wf_sdxl_sub["5"]["inputs"]["model"], ["31", 0])
+
+        # 3. FLUX Face with 2 reference images -> PuLID Flux
+        wf_flux_face = comfy_client.build_txt2img_workflow(
+            "walking on beach at sunset",
+            {"checkpointName": "flux1-dev-fp8.safetensors"},
+            uploaded_ref_names=["f0.png", "f1.png"],
+            reference_mode="face",
+            reference_weight=0.85,
+        )
+        self.assertEqual(wf_flux_face["30"]["class_type"], "PulidFluxModelLoader")
+        self.assertEqual(wf_flux_face["33"]["class_type"], "ApplyPulidFlux")
+        self.assertEqual(wf_flux_face["5"]["inputs"]["model"], ["33", 0])
+
+        # 4. FLUX Subject with 2 reference images -> FLUX Redux StyleModelApply chain
+        wf_flux_sub = comfy_client.build_txt2img_workflow(
+            "floating in outer space",
+            {"checkpointName": "flux1-dev-fp8.safetensors"},
+            uploaded_ref_names=["s0.png", "s1.png"],
+            reference_mode="subject",
+            reference_weight=0.7,
+        )
+        self.assertEqual(wf_flux_sub["30"]["class_type"], "StyleModelLoader")
+        self.assertEqual(wf_flux_sub["31"]["class_type"], "CLIPVisionLoader")
+        self.assertEqual(wf_flux_sub["33"]["class_type"], "StyleModelApply")
+        self.assertEqual(wf_flux_sub["35"]["class_type"], "StyleModelApply")
+        self.assertEqual(wf_flux_sub["5"]["inputs"]["positive"], ["35", 0])
+
 
 if __name__ == "__main__":
     unittest.main()

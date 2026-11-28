@@ -81,6 +81,166 @@ def adapt_sampler_params_for_checkpoint(
     return sampler, "normal", steps, cfg
 
 
+def _attach_reference_nodes(
+    workflow: dict[str, Any],
+    uploaded_ref_names: list[str],
+    reference_mode: str,
+    reference_weight: float,
+    is_flux: bool,
+    model_ref: list[Any],
+    positive_ref: list[Any],
+) -> None:
+    """
+    Attach multi-image reference consistency nodes (1-4 images):
+    - SDXL face:    IPAdapterUnifiedLoaderFaceID (FACEID PLUS V2) + IPAdapterFaceID + ImageBatch
+    - SDXL subject: IPAdapterUnifiedLoader (PLUS high strength) + IPAdapter + ImageBatch
+    - FLUX face:    PulidFluxModelLoader + PulidFluxInsightFaceLoader + PulidFluxEvaClipLoader + ApplyPulidFlux
+    - FLUX subject: StyleModelLoader (flux1-redux-dev) + CLIPVisionLoader (sigclip) + StyleModelApply chain
+    """
+    refs = [r for r in uploaded_ref_names if r][:4]
+    if not refs:
+        return
+
+    safe_weight = max(0.2, min(float(reference_weight), 1.0))
+    mode = "subject" if str(reference_mode).lower() == "subject" else "face"
+
+    img_node_ids: list[str] = []
+    for idx, fname in enumerate(refs):
+        nid = str(20 + idx)
+        workflow[nid] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": fname},
+        }
+        img_node_ids.append(nid)
+
+    batched_img_ref: list[Any] = [img_node_ids[0], 0]
+    for idx in range(1, len(img_node_ids)):
+        batch_nid = str(23 + idx)
+        workflow[batch_nid] = {
+            "class_type": "ImageBatch",
+            "inputs": {
+                "image1": batched_img_ref,
+                "image2": [img_node_ids[idx], 0],
+            },
+        }
+        batched_img_ref = [batch_nid, 0]
+
+    if not is_flux:
+        if mode == "face":
+            workflow["30"] = {
+                "class_type": "IPAdapterUnifiedLoaderFaceID",
+                "inputs": {
+                    "model": model_ref,
+                    "preset": "FACEID PLUS V2",
+                    "lora_strength": 0.6,
+                    "provider": "CUDA",
+                },
+            }
+            workflow["31"] = {
+                "class_type": "IPAdapterFaceID",
+                "inputs": {
+                    "model": ["30", 0],
+                    "ipadapter": ["30", 1],
+                    "image": batched_img_ref,
+                    "weight": safe_weight,
+                    "weight_faceidv2": safe_weight,
+                    "weight_type": "linear",
+                    "combine_embeds": "average",
+                    "start_at": 0.0,
+                    "end_at": 1.0,
+                    "embeds_scaling": "V only",
+                },
+            }
+            workflow["5"]["inputs"]["model"] = ["31", 0]
+        else:
+            workflow["30"] = {
+                "class_type": "IPAdapterUnifiedLoader",
+                "inputs": {
+                    "model": model_ref,
+                    "preset": "PLUS (high strength)",
+                },
+            }
+            workflow["31"] = {
+                "class_type": "IPAdapter",
+                "inputs": {
+                    "model": ["30", 0],
+                    "ipadapter": ["30", 1],
+                    "image": batched_img_ref,
+                    "weight": safe_weight,
+                    "weight_type": "linear",
+                    "combine_embeds": "average",
+                    "start_at": 0.0,
+                    "end_at": 1.0,
+                    "embeds_scaling": "V only",
+                },
+            }
+            workflow["5"]["inputs"]["model"] = ["31", 0]
+        return
+
+    # FLUX.1-dev FP8
+    if mode == "face":
+        workflow["30"] = {
+            "class_type": "PulidFluxModelLoader",
+            "inputs": {"pulid_file": "pulid_flux_v0.9.1.safetensors"},
+        }
+        workflow["31"] = {
+            "class_type": "PulidFluxInsightFaceLoader",
+            "inputs": {"provider": "CUDA"},
+        }
+        workflow["32"] = {
+            "class_type": "PulidFluxEvaClipLoader",
+            "inputs": {},
+        }
+        workflow["33"] = {
+            "class_type": "ApplyPulidFlux",
+            "inputs": {
+                "model": model_ref,
+                "pulid_flux": ["30", 0],
+                "eva_clip": ["32", 0],
+                "face_analysis": ["31", 0],
+                "image": batched_img_ref,
+                "weight": safe_weight,
+                "start_at": 0.0,
+                "end_at": 1.0,
+            },
+        }
+        workflow["5"]["inputs"]["model"] = ["33", 0]
+    else:
+        workflow["30"] = {
+            "class_type": "StyleModelLoader",
+            "inputs": {"style_model_name": "flux1-redux-dev.safetensors"},
+        }
+        workflow["31"] = {
+            "class_type": "CLIPVisionLoader",
+            "inputs": {"clip_name": "sigclip_vision_patch14_384.safetensors"},
+        }
+        cur_pos = positive_ref
+        per_ref_strength = round(safe_weight / max(1, len(img_node_ids)), 3)
+        for idx, img_nid in enumerate(img_node_ids):
+            enc_nid = str(32 + idx * 2)
+            apply_nid = str(33 + idx * 2)
+            workflow[enc_nid] = {
+                "class_type": "CLIPVisionEncode",
+                "inputs": {
+                    "clip_vision": ["31", 0],
+                    "image": [img_nid, 0],
+                    "crop": "center",
+                },
+            }
+            workflow[apply_nid] = {
+                "class_type": "StyleModelApply",
+                "inputs": {
+                    "conditioning": cur_pos,
+                    "style_model": ["30", 0],
+                    "clip_vision_output": [enc_nid, 0],
+                    "strength": per_ref_strength,
+                    "strength_type": "multiply",
+                },
+            }
+            cur_pos = [apply_nid, 0]
+        workflow["5"]["inputs"]["positive"] = cur_pos
+
+
 def build_txt2img_workflow(
     prompt_text: str,
     style_preset: dict[str, Any],
@@ -88,8 +248,11 @@ def build_txt2img_workflow(
     seed: Optional[int] = None,
     aspect_ratio: str = "1:1",
     orientation: str = "portrait",
+    uploaded_ref_names: Optional[list[str]] = None,
+    reference_mode: str = "face",
+    reference_weight: float = 0.75,
 ) -> dict[str, Any]:
-    """Build ComfyUI API workflow JSON with FLUX / RealVisXL / Animagine support."""
+    """Build ComfyUI API workflow JSON with FLUX / RealVisXL / Animagine + multi-image reference support."""
     pos_tpl = style_preset.get("positivePromptTemplate") or "{prompt}"
     positive = pos_tpl.replace("{prompt}", prompt_text) if "{prompt}" in pos_tpl else f"{prompt_text}, {pos_tpl}"
     negative = style_preset.get("negativePromptTemplate") or ""
@@ -155,7 +318,8 @@ def build_txt2img_workflow(
                 "clip": ["1", 1],
             },
         }
-        workflow["5"]["inputs"]["model"] = ["8", 0]
+        model_ref = ["8", 0]
+        workflow["5"]["inputs"]["model"] = model_ref
         clip_ref = ["8", 1]
 
     workflow["2"] = {
@@ -166,6 +330,17 @@ def build_txt2img_workflow(
         "class_type": "CLIPTextEncode",
         "inputs": {"text": "" if is_flux else negative, "clip": clip_ref},
     }
+
+    if uploaded_ref_names:
+        _attach_reference_nodes(
+            workflow=workflow,
+            uploaded_ref_names=uploaded_ref_names,
+            reference_mode=reference_mode,
+            reference_weight=reference_weight,
+            is_flux=is_flux,
+            model_ref=model_ref,
+            positive_ref=["2", 0],
+        )
 
     return workflow
 
@@ -352,6 +527,30 @@ def _submit_and_fetch_image(
     }
 
 
+def upload_reference_images_to_comfyui(
+    reference_images: list[str],
+    job_id: str,
+    comfy_url: str = COMFYUI_URL,
+    output_dir: Path = OUTPUT_DIR,
+) -> list[str]:
+    """Decode up to 4 base64 reference images, save to refs/, and upload each to ComfyUI."""
+    uploaded: list[str] = []
+    if not reference_images:
+        return uploaded
+    refs_dir = output_dir / "refs"
+    refs_dir.mkdir(parents=True, exist_ok=True)
+    for idx, raw_b64 in enumerate(reference_images[:4]):
+        if not raw_b64:
+            continue
+        payload = raw_b64.split(",", 1)[1] if "," in raw_b64 else raw_b64
+        img_bytes = base64.b64decode(payload)
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        ref_file = refs_dir / f"{job_id}_ref_{idx}.png"
+        img.save(ref_file, format="PNG")
+        uploaded.append(upload_image_to_comfyui(ref_file, comfy_url=comfy_url))
+    return uploaded
+
+
 def run_comfyui_txt2img(
     job_id: str,
     prompt_text: str,
@@ -359,17 +558,29 @@ def run_comfyui_txt2img(
     vram_mode: str = "low_vram",
     aspect_ratio: str = "1:1",
     orientation: str = "portrait",
+    reference_images: Optional[list[str]] = None,
+    reference_mode: str = "face",
+    reference_weight: float = 0.75,
     comfy_url: str = COMFYUI_URL,
     output_dir: Path = OUTPUT_DIR,
 ) -> dict[str, str]:
-    """Execute txt2img via ComfyUI API, save PNG to Drive, and return relative path + WebP thumbnail."""
+    """Execute txt2img (optionally with 1-4 reference images) via ComfyUI API."""
     free_comfyui_vram(comfy_url)
+    uploaded_refs = upload_reference_images_to_comfyui(
+        reference_images or [],
+        job_id=job_id,
+        comfy_url=comfy_url,
+        output_dir=output_dir,
+    )
     workflow = build_txt2img_workflow(
         prompt_text,
         style_preset,
         vram_mode=vram_mode,
         aspect_ratio=aspect_ratio,
         orientation=orientation,
+        uploaded_ref_names=uploaded_refs,
+        reference_mode=reference_mode,
+        reference_weight=reference_weight,
     )
     return _submit_and_fetch_image(job_id, workflow, comfy_url=comfy_url, output_dir=output_dir)
 

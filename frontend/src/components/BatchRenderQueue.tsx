@@ -11,6 +11,7 @@ import {
 import type { GatewayConfig, RenderJob, Shot, Storyboard, StylePreset } from '../types/domain';
 import { ArchSelect } from './ArchSelect';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ReferenceImagesPicker, type ReferenceMode } from './ReferenceImagesPicker';
 
 interface BatchRenderQueueProps {
   user: User | null;
@@ -27,6 +28,9 @@ export const BatchRenderQueue: React.FC<BatchRenderQueueProps> = ({
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState<string>('');
   const [idToken, setIdToken] = useState<string>('');
+  const [refImages, setRefImages] = useState<string[]>([]);
+  const [refMode, setRefMode] = useState<ReferenceMode>('face');
+  const [refWeight, setRefWeight] = useState<number>(0.75);
   const [submitting, setSubmitting] = useState(false);
   const [rerollTarget, setRerollTarget] = useState<Shot | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -103,6 +107,9 @@ export const BatchRenderQueue: React.FC<BatchRenderQueueProps> = ({
         storyboard: activeBoard,
         presets,
         rerollShotId,
+        referenceImages: refImages,
+        referenceMode: refMode,
+        referenceWeight: refWeight,
       });
       if (!useCloud) {
         setJobs((prev) => [created, ...prev]);
@@ -159,6 +166,16 @@ export const BatchRenderQueue: React.FC<BatchRenderQueueProps> = ({
             }))}
           />
         </div>
+
+        <ReferenceImagesPicker
+          images={refImages}
+          mode={refMode}
+          weight={refWeight}
+          onChangeImages={setRefImages}
+          onChangeMode={setRefMode}
+          onChangeWeight={setRefWeight}
+          label="全片角色／主體鎖定（選填，最多 4 張）"
+        />
 
         <button
           type="button"

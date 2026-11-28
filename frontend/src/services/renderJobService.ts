@@ -76,6 +76,9 @@ export async function submitSingleImageRenderJob(params: {
   stylePreset: StylePreset;
   aspectRatio?: string;
   orientation?: 'portrait' | 'landscape';
+  referenceImages?: string[];
+  referenceMode?: 'face' | 'subject';
+  referenceWeight?: number;
 }): Promise<RenderJob> {
   const {
     useCloud,
@@ -85,6 +88,9 @@ export async function submitSingleImageRenderJob(params: {
     stylePreset,
     aspectRatio = '1:1',
     orientation = 'portrait',
+    referenceImages = [],
+    referenceMode = 'face',
+    referenceWeight = 0.75,
   } = params;
   const ts = nowTaipeiIso();
   const jobId = `job-img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -96,6 +102,8 @@ export async function submitSingleImageRenderJob(params: {
     stylePresetId: stylePreset.id,
     stylePresetName: stylePreset.name,
     checkpointName: stylePreset.checkpointName || '',
+    referenceCount: referenceImages.length,
+    referenceMode: referenceImages.length > 0 ? referenceMode : undefined,
     aspectRatio,
     orientation,
     status: 'queued',
@@ -126,6 +134,9 @@ export async function submitSingleImageRenderJob(params: {
       style_preset: stylePreset,
       aspect_ratio: aspectRatio,
       orientation,
+      reference_images: referenceImages.slice(0, 4),
+      reference_mode: referenceMode,
+      reference_weight: referenceWeight,
     }),
   });
 
@@ -227,8 +238,21 @@ export async function submitStoryboardBatchJob(params: {
   storyboard: Storyboard;
   presets: StylePreset[];
   rerollShotId?: string;
+  referenceImages?: string[];
+  referenceMode?: 'face' | 'subject';
+  referenceWeight?: number;
 }): Promise<RenderJob> {
-  const { useCloud, gatewayUrl, user, storyboard, presets, rerollShotId } = params;
+  const {
+    useCloud,
+    gatewayUrl,
+    user,
+    storyboard,
+    presets,
+    rerollShotId,
+    referenceImages = [],
+    referenceMode = 'face',
+    referenceWeight = 0.75,
+  } = params;
   const ts = nowTaipeiIso();
   const jobId = `job-sb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -236,6 +260,8 @@ export async function submitStoryboardBatchJob(params: {
     id: jobId,
     kind: 'storyboard_batch',
     storyboardId: storyboard.id,
+    referenceCount: referenceImages.length,
+    referenceMode: referenceImages.length > 0 ? referenceMode : undefined,
     status: 'queued',
     progress: 0,
     createdAt: ts,
@@ -269,6 +295,9 @@ export async function submitStoryboardBatchJob(params: {
       storyboard,
       style_presets_map: presetsMap,
       reroll_shot_id: rerollShotId || null,
+      reference_images: referenceImages.slice(0, 4),
+      reference_mode: referenceMode,
+      reference_weight: referenceWeight,
     }),
   });
 

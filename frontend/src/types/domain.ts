@@ -57,6 +57,8 @@ export interface RenderJob {
   stylePresetId?: string;
   stylePresetName?: string;
   checkpointName?: string;
+  referenceCount?: number;
+  referenceMode?: 'face' | 'subject';
   aspectRatio?: string;
   orientation?: 'portrait' | 'landscape';
   status: RenderJobStatus;
