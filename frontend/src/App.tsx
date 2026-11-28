@@ -248,33 +248,7 @@ export function App() {
           </button>
         </header>
 
-        {/* 建築導覽分頁列 (3x2) */}
-        <nav className="grid grid-cols-3 gap-1.5 pb-6">
-          {[
-            { code: '01' as const, label: '01 / 閘道' },
-            { code: '02' as const, label: '02 / 風格' },
-            { code: '03' as const, label: '03 / 生圖' },
-            { code: '04' as const, label: '04 / 分鏡' },
-            { code: '05' as const, label: '05 / 算圖' },
-            { code: '06' as const, label: '06 / 剪輯' },
-          ].map((tab) => {
-            const active = activeSection === tab.code;
-            return (
-              <button
-                key={tab.code}
-                type="button"
-                onClick={() => switchSection(tab.code)}
-                className={`min-h-[48px] border text-[11px] font-medium tracking-[0.08em] transition-all active:scale-[0.96] ${
-                  active
-                    ? 'bg-[#F4F4F0] text-[#0E0F12] border-[#F4F4F0]'
-                    : 'bg-[#181A1E] text-[#9A9E9C] border-white/14 hover:border-white/30'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+
 
         {activeSection === '01' && (
           <section className="dj-tab-enter space-y-5">
